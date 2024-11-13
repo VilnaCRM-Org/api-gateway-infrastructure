@@ -1,9 +1,0 @@
-#!/bin/bash
-
-UID=$(id -u)
-GID=$(id -g)
-
-export UID
-export GID
-
-docker compose -f docker/docker-compose.yml run --rm --build terraspace
