@@ -37,3 +37,9 @@ sh: ## Log to the docker container
 
 pulumi: ## Pulumi enables you to safely and predictably create, change, and improve infrastructure.
 	@$(EXEC_APP) ${PULUMI} "$1"
+
+apply: ## Apply pulumi to the current env
+	@$(EXEC_APP) ${PULUMI} up
+
+plan: ## Outputs the pulumi preview for the current env
+	@$(EXEC_APP) ${PULUMI} preview
