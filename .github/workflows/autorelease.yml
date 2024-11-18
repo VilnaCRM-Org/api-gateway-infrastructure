@@ -27,7 +27,7 @@ jobs:
         with:
           github-token: ${{ steps.generate_token.outputs.token }}
           output-file: "CHANGELOG.md"
-          version-file: "pulumi/pyproject.toml"
+          version-file: "composer.json"
       - name: Create Release
         uses: actions/create-release@v1
         if: ${{ steps.changelog.outputs.skipped == 'false' }}
