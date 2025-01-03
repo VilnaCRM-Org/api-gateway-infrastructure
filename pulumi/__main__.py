@@ -63,3 +63,5 @@ dns = DNS(
 
 # Export the API endpoint URL
 pulumi.export("apiEndpoint", api_gateway.api_domain_name.domain_name)
+
+# TODO: remove all manual steps that we need to perform in cli for make plan and make up (automate aws configure, secret password)
