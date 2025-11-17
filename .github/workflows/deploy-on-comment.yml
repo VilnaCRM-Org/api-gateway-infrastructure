@@ -1,0 +1,135 @@
+name: Deploy on Comment
+
+on:
+  workflow_dispatch:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  PULUMI_STACK: ${{ vars.PULUMI_STACK }}
+  PULUMI_PROJECT_DIR: pulumi
+  PULUMI_VERSION: 3.117.0
+
+jobs:
+  gate:
+    name: Comment Gate
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.parse.outputs.should_run }}
+      trigger_type: ${{ steps.parse.outputs.trigger_type }}
+      trigger_user: ${{ steps.parse.outputs.trigger_user }}
+      issue_number: ${{ steps.parse.outputs.issue_number }}
+      comment_id: ${{ steps.parse.outputs.comment_id }}
+      comment_url: ${{ steps.parse.outputs.comment_url }}
+      command: ${{ steps.parse.outputs.command }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Evaluate gate
+        id: parse
+        run: python .github/scripts/gate.py --output-json .gha/gate.json
+
+  authorize:
+    name: Authorization
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      authorized: ${{ steps.auth.outputs.authorized }}
+      via: ${{ steps.auth.outputs.via }}
+      denial: ${{ steps.auth.outputs.denial_reason }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Evaluate authorization
+        id: auth
+        env:
+          ALLOWED_DEPLOYERS: ${{ secrets.ALLOWED_DEPLOYERS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          python .github/scripts/authorize.py
+          --trigger-user "${{ needs.gate.outputs.trigger_user }}"
+          --issue-number "${{ needs.gate.outputs.issue_number }}"
+          --comment-url "${{ needs.gate.outputs.comment_url }}"
+          --deny-comments
+
+  deploy:
+    name: Pulumi Deploy
+    needs:
+      - gate
+      - authorize
+    if: needs.gate.outputs.should_run == 'true' && needs.authorize.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      added: ${{ steps.deploy.outputs.added }}
+      updated: ${{ steps.deploy.outputs.updated }}
+      replaced: ${{ steps.deploy.outputs.replaced }}
+      deleted: ${{ steps.deploy.outputs.deleted }}
+      first_error: ${{ steps.deploy.outputs.first_error }}
+      duration_seconds: ${{ steps.deploy.outputs.duration_seconds }}
+      status: ${{ steps.deploy.outputs.status }}
+      deploy_summary_b64: ${{ steps.deploy.outputs.deploy_summary_b64 }}
+    env:
+      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Pulumi CLI
+        uses: pulumi/setup-pulumi@v3
+        with:
+          pulumi-version: ${{ env.PULUMI_VERSION }}
+
+      - name: Run Pulumi deployment
+        id: deploy
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+        run: >
+          python .github/scripts/deploy.py
+          --project-dir "${{ env.PULUMI_PROJECT_DIR }}"
+          --stack "${{ env.PULUMI_STACK }}"
+          --aws-region "${{ env.AWS_REGION }}"
+          --output-json .gha/deploy-summary.json
+
+  report:
+    name: Report Result
+    needs:
+      - gate
+      - authorize
+      - deploy
+    if: always() && needs.gate.outputs.should_run == 'true' && needs.authorize.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Post deployment result
+        if: needs.gate.outputs.comment_id != ''
+        run: >
+          python .github/scripts/report.py
+          --deploy-summary-b64 "${{ needs.deploy.outputs.deploy_summary_b64 }}"
+          --trigger-user "${{ needs.gate.outputs.trigger_user }}"
+          --stack "${{ env.PULUMI_STACK }}"
+          --comment-url "${{ needs.gate.outputs.comment_url }}"
+          --issue-number "${{ needs.gate.outputs.issue_number }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
