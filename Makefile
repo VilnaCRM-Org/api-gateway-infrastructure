@@ -8,12 +8,18 @@ PULUMI_BACKEND_URL ?= s3://$(STATE_BUCKET)/state
 PULUMI_STACK  ?= $(STACK)
 AWS_REGION    ?= eu-central-1
 AWS_DEFAULT_REGION ?= $(AWS_REGION)
+AWS_PROFILE   ?= api-gateway-infrastructure
+AWS_SDK_LOAD_CONFIG ?= 1
+PULUMI_CONFIG_PASSPHRASE_FILE ?=
 
 export PULUMI_BACKEND_URL
 export PULUMI_STACK
 export STACK
 export AWS_REGION
 export AWS_DEFAULT_REGION
+export AWS_PROFILE
+export AWS_SDK_LOAD_CONFIG
+export PULUMI_CONFIG_PASSPHRASE_FILE
 
 # Executables: local only
 DOCKER_COMPOSE = docker compose

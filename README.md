@@ -45,8 +45,26 @@ start           Docker container with terraspace and terraform
 up              Start the container for development
 ```
 
+## Pulumi State Buckets
+The accompanying [`bootstrap-infrastructure`](https://github.com/VilnaCRM-Org/bootstrap-infrastructure) stack provisions dedicated S3 buckets for Pulumi state via [`pulumi/infra/pulumi_state.py`](https://github.com/VilnaCRM-Org/bootstrap-infrastructure/blob/main/pulumi/infra/pulumi_state.py). For this repository the buckets follow the convention `pulumi-api-gateway-infrastructure-<environment>-state`, so you get:
+
+- `s3://pulumi-api-gateway-infrastructure-test-state/state` for the `test` stack.
+- `s3://pulumi-api-gateway-infrastructure-prod-state/state` for the `prod` stack.
+
+See [`docs/pulumi-state-and-deploy.md`](docs/pulumi-state-and-deploy.md) for the full list of required environment variables, GitHub secrets, and the `/deploy` workflow behavior.
+
+To work with the correct backend:
+
+1. Copy `.env.example` to `.env` and adjust `PULUMI_STACK`, `AWS_REGION`, and `PULUMI_BACKEND_URL`. Docker Compose automatically loads the `.env` file so the Pulumi CLI inside the container knows which backend to use.
+2. Run `make pulumi-login` once per environment to authenticate the CLI against the shared bucket.
+3. Use the `STACK` variable to target a different environment, e.g. `STACK=prod make pulumi-preview`. The Makefile keeps `PULUMI_STACK` and `PULUMI_BACKEND_URL` in sync with the selected stack.
+
+The GitHub `deploy-on-comment` workflow reads `PULUMI_STACK` (recommended to store as a repository variable) and automatically derives the matching backend URL, so `/deploy` comments run against the same remote state that developers use locally.
+
 ## Documentation
 Start reading at the [GitHub wiki](https://github.com/VilnaCRM-Org/infrastructure-template/wiki). If you're having trouble, head for [the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting) as it's frequently updated.
+
+For IDE-specific guidance, including how to hook PyCharm autocomplete to the Docker workspace shipped with this repo, see [`docs/pycharm-autocomplete.md`](docs/pycharm-autocomplete.md).
 
 If the documentation doesn't cover what you need, search the [many questions on Stack Overflow](http://stackoverflow.com/questions/tagged/vilnacrm), and before you ask a question, [read the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting).
 
