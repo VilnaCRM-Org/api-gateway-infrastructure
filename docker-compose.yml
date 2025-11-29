@@ -11,16 +11,20 @@ services:
         USERNAME: "${USER:-appuser}"
     volumes:
       - ./pulumi:/home/${USER}/project
+      - type: bind
+        source: "${HOME}/.aws"
+        target: "/home/${USER}/.aws"
+        read_only: true
     working_dir: /home/${USER}/project
     environment:
       - USER
-      - AWS_ACCESS_KEY_ID
-      - AWS_SECRET_ACCESS_KEY
-      - AWS_SESSION_TOKEN
       - AWS_REGION
       - AWS_DEFAULT_REGION
+      - AWS_PROFILE
+      - AWS_SDK_LOAD_CONFIG
       - PULUMI_STACK
       - PULUMI_BACKEND_URL
+      - PULUMI_CONFIG_PASSPHRASE_FILE
     tty: true
     stdin_open: true
     healthcheck:
