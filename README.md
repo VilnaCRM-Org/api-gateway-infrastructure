@@ -66,6 +66,8 @@ Start reading at the [GitHub wiki](https://github.com/VilnaCRM-Org/infrastructur
 
 For IDE-specific guidance, including how to hook PyCharm autocomplete to the Docker workspace shipped with this repo, see [`docs/pycharm-autocomplete.md`](docs/pycharm-autocomplete.md).
 
+To validate the `/deploy` GitHub comment workflow (required variables, secrets, and test steps), follow [`docs/deploy-comment-testing.md`](docs/deploy-comment-testing.md).
+
 If the documentation doesn't cover what you need, search the [many questions on Stack Overflow](http://stackoverflow.com/questions/tagged/vilnacrm), and before you ask a question, [read the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting).
 
 ## Tests
