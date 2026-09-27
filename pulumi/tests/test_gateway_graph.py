@@ -1,7 +1,9 @@
 """Pulumi graph test: the first phase owns only the TLS prerequisite."""
 
 import asyncio
+import runpy
 import unittest
+from pathlib import Path
 
 from pulumi.runtime import mocks, settings, stack
 
@@ -63,6 +65,43 @@ class GatewayMocks(mocks.Mocks):
 
 
 class TestGatewayGraph(unittest.TestCase):
+    def test_entrypoint_keeps_bucket_and_certificate(self) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        provider = GatewayMocks()
+        monitor = mocks.MockMonitor(provider)
+        try:
+            mocks.set_mocks(
+                provider,
+                project="vilnacrm",
+                stack="test",
+                monitor=monitor,
+            )
+
+            def run_entrypoint() -> None:
+                path = Path(__file__).resolve().parents[1] / "__main__.py"
+                runpy.run_path(str(path))
+
+            program = stack.run_pulumi_func(run_entrypoint)
+            loop.run_until_complete(program)
+            self.assertEqual(
+                provider.resources[0][:2],
+                ("aws:s3/bucketV2:BucketV2", "my-bucket"),
+            )
+            self.assertEqual(
+                [item[0] for item in provider.resources[1:]],
+                [
+                    "aws:acm/certificate:Certificate",
+                    "aws:route53/record:Record",
+                    "aws:acm/certificateValidation:CertificateValidation",
+                    "aws:ssm/parameter:Parameter",
+                ],
+            )
+        finally:
+            settings.reset_options(project=None, stack=None)
+            loop.close()
+            asyncio.set_event_loop(None)
+
     def test_certificate_phase_has_no_public_route_or_example_bucket(
         self,
     ) -> None:
