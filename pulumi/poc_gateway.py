@@ -23,9 +23,7 @@ def assert_test_target(
             "API Gateway PoC may run only in the pinned TEST account/region."
         )
     if zone_name.rstrip(".") != TEST_ZONE_NAME or private_zone:
-        raise ValueError(
-            "API Gateway PoC requires the pinned public TEST DNS zone."
-        )
+        raise ValueError("Pinned public TEST DNS zone required.")
 
 
 def only_validation_option(options: Sequence[Any]) -> Any:
@@ -43,9 +41,7 @@ def only_validation_option(options: Sequence[Any]) -> Any:
 def provision_test_certificate() -> None:
     """Own the TLS prerequisite and publish its ARN for trusted service IaC."""
     if pulumi.get_stack() != "test":
-        raise ValueError(
-            "The TEST gateway certificate may only use stack 'test'."
-        )
+        raise ValueError("TEST gateway certificate requires stack 'test'.")
 
     caller = aws.get_caller_identity()
     region = aws.get_region()
@@ -63,9 +59,8 @@ def provision_test_certificate() -> None:
         validation_method="DNS",
         tags={"Environment": "test", "Owner": "api-gateway-infrastructure"},
     )
-    option = certificate.domain_validation_options.apply(
-        only_validation_option
-    )
+    options = certificate.domain_validation_options
+    option = options.apply(only_validation_option)
     validation_record = aws.route53.Record(
         "user-service-test-certificate-validation",
         zone_id=TEST_ZONE_ID,

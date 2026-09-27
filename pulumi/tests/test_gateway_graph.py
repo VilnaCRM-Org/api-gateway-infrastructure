@@ -72,10 +72,13 @@ class TestGatewayGraph(unittest.TestCase):
         monitor = mocks.MockMonitor(provider)
         try:
             mocks.set_mocks(
-                provider, project="vilnacrm", stack="test", monitor=monitor
+                provider,
+                project="vilnacrm",
+                stack="test",
+                monitor=monitor,
             )
             loop.run_until_complete(
-                stack.run_pulumi_func(provision_test_certificate)
+                stack.run_pulumi_func(provision_test_certificate),
             )
             types = [item[0] for item in provider.resources]
             self.assertEqual(
