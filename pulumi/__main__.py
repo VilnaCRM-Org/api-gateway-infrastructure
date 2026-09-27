@@ -1,10 +1,8 @@
-"""An AWS Python Pulumi program"""
+"""TEST user-service API Gateway certificate prerequisite.
 
-import pulumi
-from pulumi_aws import s3
+The public route follows after the service's authenticated ALB descriptor.
+"""
 
-# Create an AWS resource (S3 Bucket)
-bucket = s3.BucketV2("my-bucket")
+from poc_gateway import provision_test_certificate
 
-# Export the name of the bucket
-pulumi.export("bucket_name", bucket.id)
+provision_test_certificate()
