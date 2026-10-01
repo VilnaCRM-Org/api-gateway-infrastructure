@@ -218,6 +218,15 @@ def extra_delete(steps):
     return steps + [copy.deepcopy(dep_steps(steps)[2])]
 
 
+def second_stage_stays(steps):
+    """Another stage (shown by --show-sames) stays on the old deployment."""
+    stage = copy.deepcopy(stage_step(steps))
+    stage["urn"] += "2"
+    stage["op"] = "same"
+    stage["newState"]["inputs"]["deployment"] = "olddep1"
+    return steps + [stage]
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
@@ -231,6 +240,7 @@ def extra_delete(steps):
         mismatched_old_ids,
         no_old_id,
         extra_delete,
+        second_stage_stays,
     ],
 )
 def test_e_deployment_replace_without_every_condition_fails(mutate) -> None:

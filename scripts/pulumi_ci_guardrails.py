@@ -140,6 +140,12 @@ def _stage_moves(step: Mapping[str, Any], old_id: str) -> bool:
     )
 
 
+def _stage_stays(step: Mapping[str, Any], old_id: str) -> bool:
+    """True when `step` leaves a stage on the deployment `old_id`."""
+    new = _state_value(step, "newState", "inputs", STAGE_DEPLOYMENT_KEY)
+    return step_resource_type(step) == STAGE_TYPE and new == old_id
+
+
 def _deployment_steps(
     steps: Sequence[Mapping[str, Any]],
 ) -> dict[str, list[tuple[int, Mapping[str, Any]]]]:
@@ -169,8 +175,9 @@ def allowed_deployment_replacements(steps: Sequence[Mapping[str, Any]]) -> set[s
     A replacement passes only when its steps are exactly
     `create-replacement`, `replace`, `delete-replaced` in that order (create
     before delete), the `replace` step marks the old state for a later
-    delete, and a stage that used the old deployment is updated to a new
-    deployment in the same plan, before the old deployment is deleted.
+    delete, a stage that used the old deployment is updated to a new
+    deployment in the same plan, before the old deployment is deleted, and
+    no stage of the plan stays on the old deployment.
     """
     allowed: set[str] = set()
     for urn, indexed in _deployment_steps(steps).items():
@@ -178,7 +185,8 @@ def allowed_deployment_replacements(steps: Sequence[Mapping[str, Any]]) -> set[s
         if replacement is None:
             continue
         old_id, delete_index = replacement
-        if any(_stage_moves(step, old_id) for step in steps[:delete_index]):
+        moved = any(_stage_moves(step, old_id) for step in steps[:delete_index])
+        if moved and not any(_stage_stays(step, old_id) for step in steps):
             allowed.add(urn)
     return allowed
 
