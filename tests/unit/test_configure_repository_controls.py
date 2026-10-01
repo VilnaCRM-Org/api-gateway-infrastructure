@@ -134,6 +134,9 @@ class FakeGitHub:
             return env
         if parts[1] == "deployment-branch-policies":
             return listing(env["deployment_branch_policies"])
+        if parts[1].startswith("secrets"):
+            rows = [{"name": n} for n in self.data["secrets"][name]]
+            return {"total_count": len(rows), "secrets": rows}
         rows = [
             {"name": k, "value": v} for k, v in self.data["variables"][name].items()
         ]
@@ -159,6 +162,7 @@ def test_read_live_matches_the_fixture_readback(monkeypatch) -> None:
     expected = readback()
     assert live["ruleset"] == expected["ruleset"]
     assert live["variables"] == expected["variables"]
+    assert live["secrets"] == expected["secrets"]
     for name in rc.ENVIRONMENTS:
         assert (
             live["environments"][name]["deployment_branch_policies"]
@@ -389,18 +393,76 @@ def test_apply_converges_in_order_and_verifies(monkeypatch, capsys) -> None:
     assert not any(m == "DELETE" and "variables" in e for m, e in steps)
 
 
-def test_apply_updates_an_existing_ruleset_and_fails_a_bad_readback(
-    monkeypatch, capsys
-) -> None:
+def differing_ruleset() -> dict:
     data = readback()
     data["ruleset"]["bypass_actors"].append({"actor_id": 1})
-    fake = install(monkeypatch, data)
+    data["ruleset"]["rules"].append({"type": "update"})
+    return data
+
+
+def test_apply_refuses_to_replace_a_differing_ruleset(monkeypatch, capsys) -> None:
+    fake = install(monkeypatch, differing_ruleset())
     assert cli.main(["--repo", REPO, "--apply"]) == 1
-    assert "1 bypass actor(s)" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "would replace it" in err
+    assert "1 bypass actor(s)" in err and "unexpected update rule" in err
+    assert "pass --replace" in err
+    assert fake.writes == []
+
+
+def test_apply_replace_proceeds_and_still_verifies(monkeypatch, capsys) -> None:
+    fake = install(monkeypatch, differing_ruleset())
+    assert cli.main(["--repo", REPO, "--apply", "--replace"]) == 1
+    captured = capsys.readouterr()
+    assert "1 bypass actor(s)" in captured.err
     assert (fake.writes[0][0], fake.writes[0][1]) == (
         "PUT",
         f"repos/{REPO}/rulesets/101",
     )
+
+
+def test_apply_of_a_matching_ruleset_needs_no_replace(monkeypatch, capsys) -> None:
+    fake = install(monkeypatch)
+    assert cli.main(["--repo", REPO, "--apply"]) == 0
+    assert "would replace" not in capsys.readouterr().err
+    assert fake.writes[0][1] == f"repos/{REPO}/rulesets/101"
+
+
+def test_replace_needs_apply(capsys) -> None:
+    assert cli.main(["--repo", REPO, "--replace", "--reviewer-id", "1"]) == 1
+    assert "only valid with --apply" in capsys.readouterr().err
+
+
+def test_check_reads_secret_names_and_fails_on_one(monkeypatch, capsys) -> None:
+    data = readback()
+    data["secrets"]["prod"] = ["AWS_SECRET_ACCESS_KEY"]
+    install(monkeypatch, data)
+    assert cli.main(["--repo", REPO, "--check"]) == 1
+    differences = json.loads(capsys.readouterr().out)["check"]["differences"]
+    assert differences == ["prod has the unexpected secret AWS_SECRET_ACCESS_KEY."]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        [],
+        {"total_count": 2, "secrets": [{"name": "A"}]},
+        {"total_count": True, "secrets": []},
+        {"total_count": 1, "secrets": ["x"]},
+        {"total_count": 1, "secrets": [{"name": 1}]},
+    ],
+)
+def test_incomplete_secret_listings_are_unreadable(monkeypatch, response) -> None:
+    monkeypatch.setattr(cli, "_run_gh_api", lambda args, **_: response)
+    assert cli._read_secret_names(REPO, "test") is None
+
+
+def test_secret_listing_failure_is_unreadable(monkeypatch) -> None:
+    def failing(args, **_):
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(cli, "_run_gh_api", failing)
+    assert cli._read_secret_names(REPO, "test") is None
 
 
 def test_apply_refuses_unreadable_variables(monkeypatch) -> None:

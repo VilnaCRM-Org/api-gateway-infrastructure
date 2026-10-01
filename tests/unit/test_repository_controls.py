@@ -45,9 +45,12 @@ def workflows(directory: Path = WF_DIR) -> dict[str, str]:
 
 
 def runs_on_pull_request(text: str) -> bool:
-    doc = wc.load(text, []) or {}
-    triggers = doc.get("on", doc.get(True))
-    return isinstance(triggers, dict) and "pull_request" in triggers
+    """True for every `on:` form that names pull_request; fails closed."""
+    doc = wc.load(text, [])
+    if doc is None:
+        return False
+    events = wc.get_events(doc, [])
+    return events is None or "pull_request" in events
 
 
 def pin_problems(required: tuple[str, ...], files: dict[str, str]) -> list[str]:
@@ -74,10 +77,16 @@ VARS_NAME = re.compile(r"""vars(?:\s*\.\s*(\w+)|\s*\[\s*'(\w+)'\s*\])""")
 
 
 def vars_problems(defined: set[str], files: dict[str, str]) -> list[str]:
-    """One direction of the variable name match: every read is defined."""
+    """One direction of the variable name match: every read is defined.
+
+    Scans `${{ }}` expressions and bare `if:` values (G22-F02).
+    """
     problems = []
     for name, text in files.items():
-        for expression in wc.EXPRESSION_RE.findall(text):
+        expressions = wc.EXPRESSION_RE.findall(text)
+        doc = wc.load(text, [])
+        expressions += [v for v in wc.iter_if_values(doc) if "${{" not in v]
+        for expression in expressions:
             reads = [m.start() for m in VARS_READ.finditer(expression)]
             named = VARS_NAME.findall(expression)
             if len(reads) != len(named):
@@ -365,6 +374,8 @@ def test_ruleset_differences_fail() -> None:
         "Ruleset is missing required checks: Contract Schema.",
         "Ruleset has unexpected required checks: Extra.",
         "Ruleset repeats a required check.",
+        "Required checks must come from the GitHub Actions app "
+        "(integration_id 15368): Extra, Ruff.",
     ]
 
 
@@ -479,16 +490,22 @@ def test_direct_reviewer_ids_and_wrong_protection_rules() -> None:
 
 def test_readback_shape_and_unexpected_entries_fail() -> None:
     assert rc.readback_blockers({}, REVIEWER_ID, {}) == [
-        "Readback must hold environments and variables objects."
+        "Readback must hold environments, variables and secrets objects."
+    ]
+    no_secrets = {k: v for k, v in readback().items() if k != "secrets"}
+    assert rc.readback_blockers(no_secrets, REVIEWER_ID, {}) == [
+        "Readback must hold environments, variables and secrets objects."
     ]
 
     def change(data: dict) -> None:
         data["environments"]["governance"] = data["environments"]["test"]
         data["variables"]["other"] = {}
+        data["secrets"]["third"] = []
 
     assert blockers_for(change) == [
         "Readback holds the unexpected environment governance.",
         "Readback holds the unexpected environment other.",
+        "Readback holds the unexpected environment third.",
     ]
 
 
@@ -532,3 +549,90 @@ def test_reviewer_with_a_matching_direct_and_nested_id_passes() -> None:
         ]
 
     assert blockers_for(change) == []
+
+
+# --- G22-F01: the checks are pinned to the GitHub Actions app ----------------
+
+
+def test_every_required_check_is_pinned_to_the_actions_app() -> None:
+    assert rc.GITHUB_ACTIONS_APP_ID == 15368
+    checks = rc.ruleset_payload()["rules"][3]["parameters"]["required_status_checks"]
+    assert {c["integration_id"] for c in checks} == {15368}
+    assert len(checks) == 19
+
+
+@pytest.mark.parametrize("app_id", [None, "missing", 0, 3, "15368", True, 15368.0])
+def test_a_missing_or_other_integration_id_fails(app_id: object) -> None:
+    def change(data: dict) -> None:
+        check = data["ruleset"]["rules"][3]["parameters"]["required_status_checks"][4]
+        if app_id == "missing":
+            del check["integration_id"]
+        else:
+            check["integration_id"] = app_id
+
+    assert blockers_for(change) == [
+        "Required checks must come from the GitHub Actions app "
+        "(integration_id 15368): Bandit."
+    ]
+
+
+def test_a_non_mapping_check_fails_the_integration_pin() -> None:
+    def change(data: dict) -> None:
+        checks = data["ruleset"]["rules"][3]["parameters"]["required_status_checks"]
+        checks[0] = "Ruff"
+
+    assert any("GitHub Actions app" in b for b in blockers_for(change))
+
+
+# --- G22-F02: every `on:` form and bare `if:` values -------------------------
+
+JOB = "jobs:\n  a:\n    name: Stray\n    runs-on: x\n    steps:\n      - run: x\n"
+
+
+@pytest.mark.parametrize(
+    "on",
+    [
+        "on: pull_request\n",
+        "on: [push, pull_request]\n",
+        "on:\n  push:\n  pull_request:\n",
+        "on: 5\n",
+    ],
+)
+def test_pin_covers_string_list_dict_and_unsupported_on_forms(on: str) -> None:
+    files = {"x.yml": on + JOB}
+    assert runs_on_pull_request(files["x.yml"]) is True
+    assert pin_problems(rc.REQUIRED_STATUS_CHECKS, files)[-1] == (
+        "pull request job 'Stray' is not a required check"
+    )
+
+
+@pytest.mark.parametrize("on", ["on: push\n", "on: [push]\n", "on:\n  push:\n"])
+def test_pin_skips_non_pull_request_on_forms(on: str) -> None:
+    assert runs_on_pull_request(on + JOB) is False
+
+
+def test_bare_if_values_are_scanned_for_vars() -> None:
+    defined = {n for env in rc.environment_variables().values() for n in env}
+    head = "on: pull_request\njobs:\n  a:\n    steps:\n      - if: "
+    ok = {"x.yml": head + "vars.AWS_APPLY_ROLE_ARN != ''\n        run: x\n"}
+    assert vars_problems(defined, ok) == []
+    bad = {"x.yml": head + "vars.NOPE == 'x'\n        run: x\n"}
+    assert vars_problems(defined, bad) == ["x.yml: vars.NOPE is not a defined variable"]
+    wrapped = {"x.yml": head + "${{ vars.NOPE }}\n        run: x\n"}
+    assert len(vars_problems(defined, wrapped)) == 1
+    opaque = {"x.yml": head + "toJSON(vars)\n        run: x\n"}
+    assert "unresolvable" in vars_problems(defined, opaque)[0]
+
+
+# --- G22-F04: no environment secret ----------------------------------------
+
+
+def test_an_environment_secret_fails() -> None:
+    def change(data: dict) -> None:
+        data["secrets"]["prod"] = ["AWS_SECRET_ACCESS_KEY"]
+        data["secrets"]["test-drift"] = None
+
+    assert blockers_for(change) == [
+        "test-drift secrets were not readable.",
+        "prod has the unexpected secret AWS_SECRET_ACCESS_KEY.",
+    ]

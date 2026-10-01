@@ -130,7 +130,9 @@ The image preinstalls the `aws` resource plugin 7.23.0 (G3.1 hand-off F02): down
 
 - Default and `--dry-run` print the payloads without calling GitHub (`--reviewer-id` also skips the user lookup).
 - `--check` reads back the ruleset, environments and variables and exits 1 on any difference; `--readback-file PATH` diffs a saved readback instead.
-- `--apply` needs a repository admin token and is the XP-A3 step (an admin, not CI).
+- `--apply` needs a repository admin token and is the XP-A3 step (an admin, not CI). It refuses to overwrite a `main` ruleset that differs from the definition (it prints what would be dropped) unless `--replace` is passed.
+- Every required check is pinned to the GitHub Actions app (`integration_id` 15368), and `--check` requires that no environment holds a secret (D-A10, NFR-A01).
+- `@Kravalg` cannot merge their own pull requests, by design: code-owner review and last-push approval need another approving reviewer, and `test` and `prod` prevent self-review.
 
 ### Program guardrails and G3.x hand-offs
 

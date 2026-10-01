@@ -98,11 +98,11 @@ def _read_environment(repo: str, name: str) -> dict[str, Any] | None:
     }
 
 
-def _variable_rows(response: object) -> list[Mapping[str, Any]] | None:
-    """Return the variable rows of a complete page, else None."""
+def _listing_rows(response: object, key: str) -> list[Mapping[str, Any]] | None:
+    """Return the rows of a complete page of a GitHub listing, else None."""
     if not isinstance(response, Mapping):
         return None
-    rows = response.get("variables")
+    rows = response.get(key)
     count = response.get("total_count")
     if not isinstance(rows, list) or type(count) is not int or count != len(rows):
         return None
@@ -119,7 +119,7 @@ def _read_variables(repo: str, name: str) -> dict[str, str] | None:
         )
     except RuntimeError:
         return None
-    rows = _variable_rows(response)
+    rows = _listing_rows(response, "variables")
     if rows is None:
         return None
     variables = {str(row.get("name")): row.get("value") for row in rows}
@@ -130,12 +130,28 @@ def _read_variables(repo: str, name: str) -> dict[str, str] | None:
     return {name: str(value) for name, value in variables.items()}
 
 
+def _read_secret_names(repo: str, name: str) -> list[str] | None:
+    """Read one environment's secret names (metadata only, never values)."""
+    try:
+        response = _run_gh_api(
+            [f"repos/{repo}/environments/{name}/secrets?per_page=100"]
+        )
+    except RuntimeError:
+        return None
+    rows = _listing_rows(response, "secrets")
+    names = [row.get("name") for row in rows or []]
+    if rows is None or not all(isinstance(n, str) for n in names):
+        return None
+    return [str(n) for n in names]
+
+
 def read_live(repo: str) -> dict[str, Any]:
     """Read the ruleset, every environment and its variables from GitHub."""
     return {
         "ruleset": _main_ruleset(repo),
         "environments": {n: _read_environment(repo, n) for n in ENVIRONMENTS},
         "variables": {n: _read_variables(repo, n) for n in ENVIRONMENTS},
+        "secrets": {n: _read_secret_names(repo, n) for n in ENVIRONMENTS},
     }
 
 
@@ -237,12 +253,54 @@ def _check_blockers(
     )
 
 
+def _guard_ruleset_replacement(
+    existing: Mapping[str, Any] | None, *, replace: bool
+) -> None:
+    """G22-F03: refuse to overwrite a differing main ruleset without --replace."""
+    if existing is None:
+        return
+    differences = _controls.ruleset_blockers(existing)
+    if not differences:
+        return
+    print(
+        "The existing main ruleset differs; apply would replace it:\n- "
+        + "\n- ".join(differences),
+        file=sys.stderr,
+    )
+    if not replace:
+        raise RuntimeError(
+            "refusing to replace the main ruleset; review the differences and "
+            "pass --replace."
+        )
+
+
+def _apply_controls(
+    repo: str,
+    payloads: Mapping[str, Any],
+    variables: Mapping[str, Mapping[str, str]],
+    *,
+    replace: bool,
+) -> None:
+    existing = _main_ruleset(repo)
+    _guard_ruleset_replacement(existing, replace=replace)
+    _apply_ruleset(repo, existing)
+    for name in ENVIRONMENTS:
+        endpoint = f"repos/{repo}/environments/{name}"
+        _run_gh_api(
+            [endpoint, "--method", "PUT"],
+            input_payload=payloads["environments"][name],
+        )
+        _configure_main_branch_policy(endpoint)
+        _apply_variables(repo, name, variables[name])
+
+
 def configure(
     repo: str,
     reviewer: str,
     *,
     apply: bool,
     reviewer_id: int | None = None,
+    replace: bool = False,
     stack_dir: Path = _controls.STACK_DIR,
 ) -> None:
     """Print the payloads, and with `apply` converge GitHub to them."""
@@ -255,15 +313,7 @@ def configure(
     resolved = _reviewer_id(reviewer, reviewer_id)
     payloads = _dry_run_payloads(reviewer, resolved, variables)
     if apply:
-        _apply_ruleset(repo, _main_ruleset(repo))
-        for name in ENVIRONMENTS:
-            endpoint = f"repos/{repo}/environments/{name}"
-            _run_gh_api(
-                [endpoint, "--method", "PUT"],
-                input_payload=payloads["environments"][name],
-            )
-            _configure_main_branch_policy(endpoint)
-            _apply_variables(repo, name, variables[name])
+        _apply_controls(repo, payloads, variables, replace=replace)
         blockers = _check_blockers(read_live(repo), resolved, stack_dir)
         if blockers:
             raise RuntimeError(" ".join(blockers))
@@ -311,6 +361,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="With --check, diff this saved readback JSON instead of GitHub.",
     )
+    parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="With --apply, allow replacing a main ruleset that differs.",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true", help="Apply with gh api.")
     mode.add_argument("--dry-run", action="store_true", help="Print the payloads.")
@@ -328,6 +383,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.readback_file is not None and not args.check:
             raise ValueError("--readback-file is only valid with --check.")
+        if args.replace and not args.apply:
+            raise ValueError("--replace is only valid with --apply.")
         if args.check:
             blockers = check(
                 args.repo,
@@ -342,6 +399,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.prod_reviewer,
             apply=args.apply,
             reviewer_id=args.reviewer_id,
+            replace=args.replace,
         )
         return 0
     except (OSError, ValueError, RuntimeError) as exc:

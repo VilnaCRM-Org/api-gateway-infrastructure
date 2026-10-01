@@ -143,61 +143,80 @@
         "parameters": {
           "required_status_checks": [
             {
-              "context": "Ruff"
+              "context": "Ruff",
+              "integration_id": 15368
             },
             {
-              "context": "Types"
+              "context": "Types",
+              "integration_id": 15368
             },
             {
-              "context": "Maintainability"
+              "context": "Maintainability",
+              "integration_id": 15368
             },
             {
-              "context": "Coverage"
+              "context": "Coverage",
+              "integration_id": 15368
             },
             {
-              "context": "Bandit"
+              "context": "Bandit",
+              "integration_id": 15368
             },
             {
-              "context": "Dependency Audit"
+              "context": "Dependency Audit",
+              "integration_id": 15368
             },
             {
-              "context": "Secrets Scan"
+              "context": "Secrets Scan",
+              "integration_id": 15368
             },
             {
-              "context": "Actionlint"
+              "context": "Actionlint",
+              "integration_id": 15368
             },
             {
-              "context": "Zizmor"
+              "context": "Zizmor",
+              "integration_id": 15368
             },
             {
-              "context": "Yamllint"
+              "context": "Yamllint",
+              "integration_id": 15368
             },
             {
-              "context": "Hadolint"
+              "context": "Hadolint",
+              "integration_id": 15368
             },
             {
-              "context": "Dependency Review"
+              "context": "Dependency Review",
+              "integration_id": 15368
             },
             {
-              "context": "CodeQL (python)"
+              "context": "CodeQL (python)",
+              "integration_id": 15368
             },
             {
-              "context": "CodeQL (actions)"
+              "context": "CodeQL (actions)",
+              "integration_id": 15368
             },
             {
-              "context": "Structural Preview"
+              "context": "Structural Preview",
+              "integration_id": 15368
             },
             {
-              "context": "Destructive Diff Gate"
+              "context": "Destructive Diff Gate",
+              "integration_id": 15368
             },
             {
-              "context": "IAM Gate"
+              "context": "IAM Gate",
+              "integration_id": 15368
             },
             {
-              "context": "Policy"
+              "context": "Policy",
+              "integration_id": 15368
             },
             {
-              "context": "Contract Schema"
+              "context": "Contract Schema",
+              "integration_id": 15368
             }
           ],
           "strict_required_status_checks_policy": true

@@ -48,6 +48,11 @@ REQUIRED_STATUS_CHECKS = (
     "Contract Schema",
 )
 
+# G22-F01: every required check must come from the GitHub Actions app, so a
+# status or check run of the same name from another app cannot satisfy it.
+# Verified against GET /apps/github-actions (id 15368).
+GITHUB_ACTIONS_APP_ID = 15368
+
 # Per stack, the three environments, the variable that holds that
 # environment's role ARN, and the role the ARN names (AD-A1, D-A11).
 STACKS = ("test", "prod")
@@ -93,7 +98,8 @@ def ruleset_payload() -> dict[str, Any]:
                 "parameters": {
                     "strict_required_status_checks_policy": True,
                     "required_status_checks": [
-                        {"context": context} for context in REQUIRED_STATUS_CHECKS
+                        {"context": context, "integration_id": GITHUB_ACTIONS_APP_ID}
+                        for context in REQUIRED_STATUS_CHECKS
                     ],
                 },
             },
@@ -171,6 +177,29 @@ def status_check_context(check: object) -> str | None:
     return str(context) if context else None
 
 
+def _from_actions(check: object) -> bool:
+    if not isinstance(check, Mapping):
+        return False
+    app_id = check.get("integration_id")
+    return type(app_id) is int and app_id == GITHUB_ACTIONS_APP_ID
+
+
+def _integration_blockers(items: object) -> list[str]:
+    wrong = sorted(
+        {
+            status_check_context(i) or "<unnamed>"
+            for i in (items if isinstance(items, list) else [])
+            if not _from_actions(i)
+        }
+    )
+    if not wrong:
+        return []
+    return [
+        "Required checks must come from the GitHub Actions app "
+        f"(integration_id {GITHUB_ACTIONS_APP_ID}): {', '.join(wrong)}."
+    ]
+
+
 def _status_check_blockers(rule: Mapping[str, Any]) -> list[str]:
     parameters = rule.get("parameters")
     if not isinstance(parameters, Mapping):
@@ -190,7 +219,7 @@ def _status_check_blockers(rule: Mapping[str, Any]) -> list[str]:
         blockers.append(f"Ruleset has unexpected required checks: {', '.join(extra)}.")
     if len(contexts) != len(set(contexts)):
         blockers.append("Ruleset repeats a required check.")
-    return blockers
+    return blockers + _integration_blockers(items)
 
 
 def _pull_request_blockers(rule: Mapping[str, Any]) -> list[str]:
@@ -375,6 +404,13 @@ def variable_blockers(
     return blockers
 
 
+def secret_blockers(name: str, names: Sequence[str] | None) -> list[str]:
+    """D-A10 and NFR-A01: no environment holds any secret."""
+    if names is None:
+        return [f"{name} secrets were not readable."]
+    return [f"{name} has the unexpected secret {secret}." for secret in names]
+
+
 def readback_blockers(
     readback: Mapping[str, Any],
     reviewer_id: int,
@@ -383,16 +419,22 @@ def readback_blockers(
     """Diff a full readback (ruleset, environments, variables) against the plan."""
     environments = readback.get("environments")
     actual_variables = readback.get("variables")
-    if not isinstance(environments, Mapping) or not isinstance(
-        actual_variables, Mapping
+    secrets = readback.get("secrets")
+    if (
+        not isinstance(environments, Mapping)
+        or not isinstance(actual_variables, Mapping)
+        or not isinstance(secrets, Mapping)
     ):
-        return ["Readback must hold environments and variables objects."]
+        return ["Readback must hold environments, variables and secrets objects."]
     blockers = ruleset_blockers(readback.get("ruleset"))
     for name in ENVIRONMENTS:
         blockers += environment_blockers(name, environments.get(name), reviewer_id)
         blockers += variable_blockers(name, variables[name], actual_variables.get(name))
+        blockers += secret_blockers(name, secrets.get(name))
     blockers += [
         f"Readback holds the unexpected environment {name}."
-        for name in sorted({*environments, *actual_variables} - set(ENVIRONMENTS))
+        for name in sorted(
+            {*environments, *actual_variables, *secrets} - set(ENVIRONMENTS)
+        )
     ]
     return blockers
