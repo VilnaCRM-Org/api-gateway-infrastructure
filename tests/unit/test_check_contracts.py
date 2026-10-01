@@ -289,3 +289,66 @@ def test_main_runs_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as raised:
         runpy.run_path(cc.__file__, run_name="__main__")
     assert raised.value.code == 0
+
+
+# --- G33-F03: a trailing newline -------------------------------------------------
+
+NEWLINE = [
+    (("descriptor", "account_id"), ACCOUNT + "\n"),
+    (("descriptor", "listener_arn"), DESCRIPTOR["listener_arn"] + "\n"),
+    (("descriptor", "certificate_arn"), DESCRIPTOR["certificate_arn"] + "\n"),
+    (("integration_target",), CONTRACT["integration_target"] + "\n"),
+    (("source", "usi_commit"), CONTRACT["source"]["usi_commit"] + "\n"),
+]
+
+
+@pytest.mark.parametrize(
+    ("path", "value"), NEWLINE, ids=[".".join(p) for p, _ in NEWLINE]
+)
+def test_n_trailing_newline_fails_the_schema_itself(path: tuple, value: str) -> None:
+    """`$` alone matches before a final newline; `(?!\\n)$` does not."""
+    from jsonschema import Draft202012Validator
+
+    errors = list(Draft202012Validator(SCHEMA).iter_errors(mutate(path, value)))
+    assert [e.validator for e in errors] == ["pattern"]
+
+
+@pytest.mark.parametrize(
+    ("path", "value"), NEWLINE, ids=[".".join(p) for p, _ in NEWLINE]
+)
+def test_n_trailing_newline_fails_the_check(
+    path: tuple, value: str, tree: Path
+) -> None:
+    add_contract(tree, mutate(path, value))
+    problems = cc.check_tree(tree)
+    assert any("does not match" in p for p in problems)
+    assert any(p.endswith("control character") for p in problems)
+
+
+def test_n_control_character_in_any_string_or_key(tree: Path) -> None:
+    document = mutate(("descriptor", "tls_server_name"), "user.vilnacrmtest.com")
+    document["source"]["usi_run_url\t"] = "x"
+    document["descriptor"]["subnet_ids"] = ["subnet-0123abcd", "subnet-0123abce\x00"]
+    add_contract(tree, document)
+    controls = [p for p in cc.check_tree(tree) if p.endswith("control character")]
+    assert controls == [
+        "user-service-backend/test.json: $.descriptor.subnet_ids[1]: control character",
+        "user-service-backend/test.json: $.source key 'usi_run_url\\t': "
+        "control character",
+    ]
+
+
+def test_e_unanchored_schema_pattern_fails(tree: Path) -> None:
+    schema = copy.deepcopy(SCHEMA)
+    descriptor = schema["properties"]["descriptor"]["properties"]
+    descriptor["account_id"]["pattern"] = "^[0-9]{12}$"
+    write_schema(tree, schema)
+    assert cc.check_tree(tree) == [
+        f"schema/{cc.BACKEND_SCHEMA}: pattern not anchored with ^...(?!\\n)$ at "
+        "#/properties/descriptor/properties/account_id/pattern"
+    ]
+
+
+def test_every_committed_pattern_is_anchored() -> None:
+    assert list(cc.loose_patterns(SCHEMA)) == []
+    assert list(cc.loose_patterns([{"pattern": "x$"}])) == ["#/0/pattern"]

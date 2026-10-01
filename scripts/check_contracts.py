@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
@@ -77,6 +78,41 @@ def open_object_schemas(schema: Any, where: str = "#") -> Iterator[str]:
             yield from open_object_schemas(value, f"{where}/{index}")
 
 
+# JSON Schema searches a pattern, and `$` also matches before a final "\n",
+# so every pattern must end with a negative lookahead (gate G33-F03).
+PATTERN_END = r"(?!\n)$"
+CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def loose_patterns(schema: Any, where: str = "#") -> Iterator[str]:
+    """Yield the location of every pattern that is not fully anchored."""
+    if isinstance(schema, dict):
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str) and not (
+            pattern.startswith("^") and pattern.endswith(PATTERN_END)
+        ):
+            yield f"{where}/pattern"
+        for key, value in schema.items():
+            yield from loose_patterns(value, f"{where}/{key}")
+    elif isinstance(schema, list):
+        for index, value in enumerate(schema):
+            yield from loose_patterns(value, f"{where}/{index}")
+
+
+def control_characters(document: Any, where: str = "$") -> Iterator[str]:
+    """Yield the location of every key or string holding a control character."""
+    if isinstance(document, dict):
+        for key, value in document.items():
+            if CONTROL_RE.search(key):
+                yield f"{where} key {key!r}"
+            yield from control_characters(value, f"{where}.{key}")
+    elif isinstance(document, list):
+        for index, value in enumerate(document):
+            yield from control_characters(value, f"{where}[{index}]")
+    elif isinstance(document, str) and CONTROL_RE.search(document):
+        yield where
+
+
 def check_schema(path: Path) -> list[str]:
     """Problems with one schema file."""
     schema = load_json(path)
@@ -84,14 +120,21 @@ def check_schema(path: Path) -> list[str]:
         Draft202012Validator.check_schema(schema)
     except SchemaError as error:
         return [f"not a valid draft 2020-12 schema: {error.message}"]
-    return [f"open object schema at {where}" for where in open_object_schemas(schema)]
+    problems = [f"open object schema at {w}" for w in open_object_schemas(schema)]
+    problems += [
+        f"pattern not anchored with ^...{PATTERN_END} at {w}"
+        for w in loose_patterns(schema)
+    ]
+    return problems
 
 
 def check_contract(path: Path, schema: Any) -> list[str]:
     """Problems with one contract file."""
+    document = load_json(path)
     validator = Draft202012Validator(schema)
-    errors = sorted(validator.iter_errors(load_json(path)), key=lambda e: e.json_path)
-    return [f"{error.json_path}: {error.message}" for error in errors]
+    errors = sorted(validator.iter_errors(document), key=lambda e: e.json_path)
+    problems = [f"{error.json_path}: {error.message}" for error in errors]
+    return problems + [f"{w}: control character" for w in control_characters(document)]
 
 
 def _contract_schema(relative: Path) -> str | None:
