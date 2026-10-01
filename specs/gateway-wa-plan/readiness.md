@@ -4,10 +4,10 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-check-implementation-readiness 
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 7 (independent readiness round 3 at 854b7c4: FAIL, 1 medium, 5 low, 5 nits; all resolved here)
-author: the planning agent that wrote revisions 1-7 (NOT an independent reviewer)
-independent_reviewer: readiness round 1 (FAIL) on revision 4; round 2 (FAIL, no major) on revision 5; round 3 (FAIL, 1 medium) on revision 6; round 4 not run yet
-status: PENDING independent readiness round 4 on revision 7
+revision: 8 (independent readiness round 4 at 7e644b7: FAIL, 2 medium, 2 low, 3 nits; all resolved here)
+author: the planning agent that wrote revisions 1-8 (NOT an independent reviewer)
+independent_reviewer: readiness round 1 (FAIL) on revision 4; round 2 (FAIL, no major) on revision 5; round 3 (FAIL, 1 medium) on revision 6; round 4 (FAIL, 2 medium) on revision 7; round 5 not run yet
+status: PENDING independent readiness round 5 on revision 8
 ---
 
 # Implementation readiness
@@ -34,8 +34,11 @@ independent readiness round. These items block implementation:
   the WAF-log resource policy once, in its own slot) or branch B (a scoped
   grant) before any form is chosen. No user decision is pending.
 - **Rows blocked by external preconditions:**
-  - XP-A1 → row 9, any later exact-ARN admission, and the API Gateway
-    service-linked role in row 16 if XP-A5 finds it missing;
+  - XP-A1 → row 9, any later exact-ARN admission, the API Gateway
+    service-linked role in row 16 if XP-A5 finds it missing, the live
+    `pulumi stack init` in row 10, under branch A the WAF-log write
+    (row 16), and under the branch-B fallback the 23-F1 install and the
+    23-F2 write;
   - XP-A3 → row 12;
   - XP-A4 → every seed slot;
   - XP-A5 → rows 16 and 22;
@@ -69,24 +72,24 @@ independent readiness round. These items block implementation:
     here, not decided.
   - rows 28-32 (with 31a-31c) after USI row 52.
 
-## Checks performed (self-check, revision 7)
+## Checks performed (self-check, revision 8)
 
 | Check | Result |
 | --- | --- |
 | Every FR and NFR has at least one story (epics FR coverage map) | yes: 25 FRs, 11 NFRs; FR-A25 now maps to G5.1 and G5.6 |
 | PRD §1 counts equal the tables | 25 + 11 = 36; offline 23 FRs + 8 NFRs = 31; live-only FRs 2; evidence-only NFRs 3; offline FRs with live evidence 18 (recomputed from the Risk column; FR-A25's Risk is now C, L) |
-| Ordered list has no forward dependency | yes, 36 rows (0-32 with 21a and 31a-31c; both D-A12 branches), including test, ownership and feature-flag levels (epics "No forward dependencies") |
+| Ordered list has no forward dependency | yes, 36 rows (0-32 with 21a and 31a-31c), checked by `evidence/check_ordered_list.py` for both D-A12 branches, plus model checks of both fallback cases (the per-stack key keeps the PROD policy out of rows 26 and 29; the contingency halves are placed before the row-23 retry and before 31c), including test, ownership and feature-flag levels (epics "No forward dependencies") |
 | Rows 26-28 of revision 1 removed, later rows renumbered | yes: G1.9, G5.7, G5.8 removed; rows 29-35 → 26-32; every in-bundle reference to a gateway row re-checked (USI row numbers unchanged) |
 | No OQ-8 (a) remnant | yes: no recovery role, `test-recovery` environment, teardown manifest, recovery guardrail mode or `detached` flag remains |
-| Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8 (they reuse the G1.4a and G1.4b matrices in PROD), G4.2 (as G4.1, in PROD), G5.6 (the gate A-T steps), and G6.1 and G6.3 (as G5.1 and gate A-P) |
+| Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8 (they reuse the G1.4a and G1.4b matrices in PROD), G4.2 (as G4.1, in PROD), G5.6 (the gate A-T steps), G6.1 (the offline checks of G5.1; its live checks first run at row 31a) and G6.3 (gate A-P) |
 | Readiness round 1 findings F1-F13 resolved | yes: F1 CR-A2, #284 precondition, no `ef419680` baseline; F2 dedicated ceiling without role-write actions, guard denies, simulator cases; F3 offline `ci` stack; F4 G2.2 environment variables; F5 per-stack target filter and platform-stack apply; F6 allowed non-exact forms, separate KMS read, no `DeleteResourcePolicy`, conditional STOP; F7 origin/main files and V-A10 reframed; F8 gate A-T steps 8a/8b; F9 real replica names, guard and identity rendered; F10-F12 below; F13 XP-A13 |
 | D-A1 honoured: the gateway roles enter through a reviewed seed catalog amendment installed by the human seed operator; the governance-stack route is not used for role creation; the independent CloudFormation owner is not the chosen route | yes (AD-A1, FR-A01, FR-A02, G1.1, G1.2). The departures from USI are listed in AD-A1: role creation by the seed (D-A1), the governance admission (D-A9), no ConfigRead (D-A10) and the stricter trust (PD-14) |
 | D-A9 honoured (re-scoped by D-A11): governance writes the gateway's grants, backend, CMK and account settings; the G1.2 change set admits it by exact ARNs (plus the four AD-A1 allowed non-exact forms), now limited to the shared Preview/Drift ceilings (in-place merge), the operator bindings and the five operator guards; USI's `G-GitHubGovernanceApply` and Apply ceiling unchanged; external-identity mode; options (a) and (c) only as rejected alternatives | yes (decisions §1 and §3; AD-A1 "Governance admission"; FR-A02…FR-A06; G1.1…G1.8; XP-A1, XP-A4) |
 | D-A11 honoured: dedicated `GitHubGovernanceApply-api-gateway-infrastructure-{env}` with its own exact-ARN ceiling, guard and identity; trust mirrors `governance_trust_policy` with the environment `{env}-governance-api-gateway-infrastructure`; per-target governance job and stack; USI's ceiling and guard untouched; options (b) and (c) rejected | yes (decisions §1, §3; AD-A1; FR-A02; G1.1-G1.3) |
-| V-A12 (size) | resolved; re-measured in revision 7 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`; rendered documents committed under `evidence/`). Dedicated Apply ceiling and identity 5830 under D-A12 branch A, 6065 under branch B (TEST, PROD); dedicated guard 5565; shared Preview/Drift ceilings branch A 3789/3799 → 5387/5397 (TEST/PROD; 3889 → 5487 at `ff2eaf29…`), branch B → 5419/5429 (5519); USI's Apply ceiling unchanged at 5752/5762. All ≤ 6144; branch B has 79 characters of headroom; G1.1 re-renders with the final names, and an overflow is a STOP and a user decision |
+| V-A12 (size) | resolved; re-measured in revision 8 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`; rendered documents committed under `evidence/`). Dedicated Apply ceiling and identity 5830 under D-A12 branch A, 6095 under branch B (TEST, PROD; revision 8 adds the exact-ARN delete, PD-15); dedicated guard 5565; shared Preview/Drift ceilings branch A 3789/3799 → 5387/5397 (TEST/PROD; 3889 → 5487 at `ff2eaf29…`), branch B → 5419/5429 (5519); USI's Apply ceiling unchanged at 5752/5762. All ≤ 6144; branch B has 49 characters of headroom; G1.1 re-renders with the final names, and an overflow is a STOP and a user decision |
 | V-A13 (shared-ceiling budget across both plans) | open check: after #284 + gateway, TEST keeps 657 (branch A) or 625 (branch B) characters for USI's TEST additions (S5.2 TEST before the slot, XP-11 after it); PROD keeps 747 (A) or 715 (B) for USI's PROD additions (S5.2 PROD, S5.24a/b, PROD only); G1.1 renders against the row-34 result catalog; CR-A2 carries the budget; over 6144 → STOP for both owners |
 | D-A10 honoured: no ConfigRead roles; c = 0; the Apply guard's secret-read statement has no CI-secret variant; a later reader needs a reviewed amendment | yes (AD-A1; FR-A01; G1.1; G3.4; decisions §3) |
-| Counts (re-verified in revision 7; D-A12 branch A's resource policy is not an IAM policy and adds nothing) | per environment 30 principals (24 + 6), 21 existing roles, 9 seed-created principals (3 + 6), **67** policies (55 + 4 boundaries/ceilings + 6 guards + 2 identities: logging role and dedicated governance role). The coordinator's estimate of 66 omitted the dedicated role's seed-owned identity (AD-A1 derivation) |
+| Counts (re-verified in revision 8; PD-15 adds an action, not a policy; D-A12 branch A's resource policy is not an IAM policy and adds nothing) | per environment 30 principals (24 + 6), 21 existing roles, 9 seed-created principals (3 + 6), **67** policies (55 + 4 boundaries/ceilings + 6 guards + 2 identities: logging role and dedicated governance role). The coordinator's estimate of 66 omitted the dedicated role's seed-owned identity (AD-A1 derivation) |
 | No story narrows an existing seed guard statement on Resource `*` | yes. **Recorded exception (D-A9, re-scoped by D-A11):** the shared governance Preview/Drift ceilings and the five operator guards (TEST `0c5eed92…`, `c18540fb…`, `408cdbf9…`; PROD `de33acbe…`, `0142330f…`, `7a337042…`) gain exact gateway entries. Two of those guards (`c18540fb…`, `0142330f…`) are Resource-`*` denies with an `ArnNotEquals` condition and are named in the exception. USI's `G-GitHubGovernanceApply` (`8c068aaa…`, `5366ec11…`, `dc27f076…`) and `ceiling/GitHubGovernanceApply` do not change (brief, Constraints) |
 | No CI role gets `ssm:*`, `iam:*`, `iam:PassRole`, `iam:CreateServiceLinkedRole` | yes (AD-A7 deny set; AD-A1 guards; G1.4a and G1.4b matrices) |
 | D-15 honoured: no SSM write or read anywhere | yes (AD-A2 drops PR #34's parameter; the policy pack refuses `aws:ssm/*`) |
@@ -122,7 +125,7 @@ governance role); their rejected alternatives are kept in
 - CR-A2: the gateway seed slot after USI row 34, with the rebase and the
   shared-ceiling budget.
 
-The planning defaults PD-1…PD-14 are not decisions; the user may change any
+The planning defaults PD-1…PD-16 are not decisions; the user may change any
 of them. A conditional decision appears only if V-A7 fails (an
 account-wide ACM metadata read, AD-A7) or if V-A6 fails (WAF log delivery
 without `logs:PutResourcePolicy`; D-A5 excludes the `*` grant).
@@ -134,8 +137,8 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | Role | Items |
 | --- | --- |
 | BI owner | G1.x authorship; V-A10 (reversing origin/main's rule against extending the seed inventory); XP-A4 slot ordering with the USI queue (CR-A2); XP-A5 and XP-A12 read-backs; accepting the residual that USI's governance Apply can write `governance/*`, including the gateway governance stack's state; the PROD seed stack's installed-state read before G1.2 PROD |
-| Human seed operator (XP-A1) | G1.2 install with the dedicated governance role and the re-scoped admission, trust activation and pin evidence; any later exact-ARN admission; the API Gateway SLR if missing |
-| Governance stack (gateway target, `{env}-governance-api-gateway-infrastructure`) | G1.3…G1.8 governance PRs and applies under the dedicated role, inside the admitted ARN set (D-A9, D-A11) |
+| Human seed operator (XP-A1) | G1.2 install with the dedicated governance role and the re-scoped admission, trust activation and pin evidence; any later exact-ARN admission; the API Gateway SLR if missing; the live `pulumi stack init` under the session policy, including its self-assume precondition; under D-A12 branch A, the one-time account-scoped WAF-log policy write; under the branch-B fallback (PD-16), the 23-F1 seed amendment install and the 23-F2 account-scoped write |
+| Governance stack (gateway target, `{env}-governance-api-gateway-infrastructure`) | G1.3…G1.8 governance PRs and applies under the dedicated role, inside the admitted ARN set (D-A9, D-A11); under branch B, G1.5b at rows 21a and 31b and the 23-F3 governance PR that deletes the policy through CI (PD-15) |
 | BI repository admin | G1.3: create the `{test,prod}-governance-api-gateway-infrastructure` environments (`@Kravalg` sole reviewer), per-action authorization |
 | `@Kravalg` | seed and stack reviews, BI and AGI PR approvals, every protected-environment apply, XP-A3 admin apply |
 | Gateway owner | G0.1 and the D-A6 emptiness check, the certificate hand-offs (XP-A8), PR #34 amendment coordination |
@@ -162,6 +165,50 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | terraform-terraspace | not applicable |
 | bmad-autonomous-planning | the planning chain itself (revisions 1-7) |
 
+## Readiness round 4 (on `7e644b7`, FAIL: 2 medium, 2 low, 3 nits): resolution table
+
+| # | Finding (short) | Where resolved (revision 8) |
+| --- | --- | --- |
+| R4-1 | The `get_log_group` lookup needs `DescribeLogGroups` and `ListTagsForResource`, which no role holds; the PROD policy entered the PROD governance plans at rows 26 and 29 before its log group exists | G1.5b builds the log-group ARN from stack config (no lookup). The closed per-stack key `gateway_waf_log_policy` (default `false`; TEST set at 21a, PROD at 31b) gates the declaration. An N test asserts that the PROD stack plans no `aws:cloudwatch/logResourcePolicy:LogResourcePolicy` while the key is `false`. E case: an absent log group fails `PutResourcePolicy` in a single-resource PR with no partial write. The dependency claims (epics ordered list, the self-check above) are re-checked by script for both branches |
+| R4-2 | 23-F3 ran outside CI | PD-15: under branch B only, `logs:DeleteResourcePolicy` on the exact log-group ARN, in the `PutResourcePolicy` statement; branch B re-measured at 6095 (≤ 6144, no wildcard). 23-F3 is a reviewed governance PR (`/pulumi plan|up`); BI `scripts/pulumi_ci_guardrails.py` lines 17-30 list no `aws:cloudwatch/` type as critical, and `find_destructive_steps` (lines 115-125) flags only critical types. 23-F1 drops all three `logs:` actions. The round-1 F6 rule is retired in PD-15, not in the D-A12 cell. XP-A1 holds no delete role |
+| R4-3 | 23-F1 packet, CR-A2/XP-A4, branch-A slot, role tables, retry order | G5.4 23-F1 lists the source packet (amendment module, Modify-row change-set validator, tests, seed review). CR-A2 and XP-A4 list 23-F1 as a catalog change that rebases later USI modules and lands after the S4.6 step-20 seed amendments of USI row 43 (S5.5/S5.18b) are installed and pinned and before USI row 45 (the queue stays one-open). The branch-A slot before row 16 is the normal position; 23-F2 after row 23 is the fallback position. prd §2 and the role table list the 23-F actions. The row-23 retry waits only for the TEST halves; the PROD halves (23-F1, 23-F2) run after 31a and before 31c, and row 31b is then not applicable |
+| R4-4 | Test and acceptance gaps | G6.2a E: a mock test that `front_door: observability` and `true` give identical URNs and parents for the observability resources. G6.2 N: no delete or replace of `aws:cloudwatch/logGroup:LogGroup`. G6.1: the offline checks of G5.1, live checks first at 31a. FR coverage lists G6.2a for FR-A18 and FR-A21 |
+| Nit 1 | Session-policy `ListBucket` | The `StringLike` prefix also covers the lock prefix, only if `pulumi stack init` takes a lock |
+| Nit 2 | Self-assume precondition owner | The XP-A1 operator (architecture session policy; role table above) |
+| Nit 3 | Plan rules in the D-A12 cell | Moved to PD-15 and PD-16; the cell points to them |
+
+## Revision 8 pre-commit audit (fresh context, `claude-router:audit`)
+
+**Audit of the uncommitted revision 8: REFUTED, narrowly** (3 P3, 6 P4). It confirmed:
+- every size, re-rendered from the BI `pulumi/` directory: 5830 (A) and 6095 (B) dedicated, guard 5565, shared 5387/5397 (A) and 5419/5429 (B);
+- that the committed `evidence/*.json` are byte-equal to the in-memory render;
+- that branch B holds exactly Put+Delete on the exact log-group ARN plus `DescribeResourcePolicies` on `*`, and branch A holds no `logs:` statement;
+- BI `scripts/pulumi_ci_guardrails.py` lines 17-30 and 115-125 (no `aws:cloudwatch/` critical type), so 23-F3 runs as a governance PR;
+- no forward dependency in the 36 rows; that only `specs/` changed.
+
+Resolutions:
+
+| # | Finding (short) | Resolution |
+| --- | --- | --- |
+| 1 | G5.4 said nothing is applied by hand, but 23-F2 is a seed-operator write | G5.4 names the exceptions: the 23-F1 seed change-set install and the 23-F2 write (branch A's user-decided write, D-A12) |
+| 2 | No negative case for the new `DeleteResourcePolicy` | G1.1 matrix: denied on `*`, on an account-scoped policy by `policyName` and on other log groups; allowed on the exact ARN. G1.5b N covers Put and Delete |
+| 3 | The fallback left the branch-B operator read grant | 23-F1 removes `logs:DescribeResourcePolicies` from the gateway operator documents; the AD-A1 coverage test checks both directions |
+| 4 | Placeholders and stale hash block | Filled; hashes regenerated |
+| 5 | Branch-A slot text stale in architecture, FR-A05 and the XP-A1 blocked rows | 23-F2 after row 23 named; XP-A1 list completed |
+| 6 | 23-F1 statement id | "the merged `logs:DescribeResourcePolicies` statement (back to `2be63eb2…`)" |
+| 7 | "may land while USI row 43 runs" against the one-open queue | See recheck |
+| 8 | Architecture "Measured (revision 7)" | Revision 8 |
+| 9 | No PROD-only fallback | G5.4 adds a PROD 23-F3 after 31b, then the PROD halves, then the 31c retry |
+
+**Recheck (same auditor): REFUTED, narrowly.** Findings 1, 2, 5, 6 and 8 FIXED; 3 and 7 PARTLY; 9 fixed with a gap; 4 expected. It ran `evidence/check_ordered_list.py` and confirmed it fails on four injected forward edges. New and residual:
+- **NEW-1 (P3):** the operator-document removal in the packet PR would fail the two-direction test while the pinned catalog still admits the read. Resolved: the removal lands in each environment's `CATALOG_HASHES` re-pin PR, so catalog and grant change in one commit.
+- **NEW-2 (P4):** the PROD half of 23-F1 has its own packet on the PROD catalog current at its slot (after USI rows 47-50); the CR-A2 rebase rule applies per environment.
+- **NEW-3 (P4):** the two fallback orders in the script are labelled model checks (script docstring, epics and the self-check above); the 21a parse splits on sentence ends.
+- **7 (residual):** 23-F1's TEST half lands after the S4.6 step-20 seed amendments of USI row 43 are installed and pinned, before USI row 45 (CR-A2, XP-A4, G5.4).
+- **9 (gap):** a PROD-only fallback leaves the branch per environment (TEST stays on branch B, PROD ends on branch A), stated in PD-16 and G5.4.
+
+No third round ran.
+
 ## Revision 7 pre-commit audit (fresh context, `claude-router:audit`)
 
 **Audit of the uncommitted revision 7: REFUTED, narrowly** (3 P3, 3 P4). It confirmed:
@@ -176,15 +223,15 @@ Resolutions:
 
 | # | Finding (short) | Resolution |
 | --- | --- | --- |
-| 1 | The branch-B to branch-A fallback (V-A6 failing live) had no rows | G5.4 STOP with contingency rows 23-F3, 23-F1 and 23-F2 (see recheck); the D-A12 cell records it as a consequence, not a new decision |
+| 1 | The branch-B to branch-A fallback (V-A6 failing live) had no rows | G5.4 STOP with contingency rows 23-F3, 23-F1 and 23-F2 (see recheck); the D-A12 cell records it as a consequence (moved to PD-16 in revision 8), not a new decision |
 | 2 | The G1.3 operator grant of `logs:DescribeResourcePolicies` was unqualified | Qualified "branch B only" |
 | 3 | The per-target change missed the receipt call | `deployment_worker_receipt.py` (workflow 680-689) added in AD-A1 and G1.3 |
 | 4 | Stale AD-A15 flag text | "G4.2, G6.2a (`observability`) and G6.2" |
-| 5 | G1.5b details | `aws.cloudwatch.get_log_group` lookup; the row-29 order is stated; row 29's tail label is fixed |
+| 5 | G1.5b details | `aws.cloudwatch.get_log_group` lookup (revision 8, R4-1: dropped; the ARN comes from stack config); the row-29 order is stated; row 29's tail label is fixed |
 | 6 | G6.2a had no Files line | Files listed; `observability` accepted only in `prod`; G3.1's certificate rule applies |
 
 **Recheck (same auditor): REFUTED, narrowly.** Findings 2-6 FIXED; 1 PARTLY. New:
-- **N1 (P3):** 23-F3 could not run, because no role held `DeleteResourcePolicy` and 23-F1 removed the reads first. Resolved: 23-F3 runs first, out of CI, by the XP-A1 operator under a narrowed session (`logs:DeleteResourcePolicy` and `DescribeResourcePolicies` on the exact log group, plus the stack checkpoint paths for `pulumi state delete`), then a governance PR removes the declaration. Branch B's size is unchanged; no governance role holds `DeleteResourcePolicy`.
+- **N1 (P3):** 23-F3 could not run, because no role held `DeleteResourcePolicy` and 23-F1 removed the reads first. Resolved: 23-F3 runs first, out of CI, by the XP-A1 operator under a narrowed session (`logs:DeleteResourcePolicy` and `DescribeResourcePolicies` on the exact log group, plus the stack checkpoint paths for `pulumi state delete`), then a governance PR removes the declaration. Branch B's size is unchanged; no governance role holds `DeleteResourcePolicy`. *Superseded in revision 8 (R4-2, PD-15): 23-F3 is a governance PR through CI; the out-of-CI delete is removed.*
 - **N2 (P4):** 23-F1 and 23-F2 now run TEST then PROD, and G6.2 Needs names the PROD write.
 - **N3:** G1.5b's STOP points to the sequence.
 - **N4:** 23-F1 cites the CR-A2 rebase and the `CATALOG_HASHES` re-pin.
@@ -250,7 +297,7 @@ A simulator run is part of acceptance, and the wording is unified in AD-A1, G1.3
 | F3 | Structural Preview cannot work with the flags on | AD-A15 offline `ci` stack (revision 6 adds the N2 provider); G3.1, G3.3, G4.1, G5.1; FR-A09, FR-A11 |
 | F4 | Nobody sets the AGI environment variables | G2.2 and FR-A07 variables, `--check`, one-directional name-match test (reverse direction in G3.5); row 12 |
 | F5 | Catalog change affects other stacks | G1.3 target filter; BI runner apply order; platform-stack apply (prd §2) |
-| F6 | Non-exact entries | D-A14 (user-accepted forms); separate KMS read; no `DeleteResourcePolicy`; revision 6 removes `logs:PutResourcePolicy` on `*` (D-A12) |
+| F6 | Non-exact entries | D-A14 (user-accepted forms); separate KMS read; no `DeleteResourcePolicy` (retired in revision 8 for the exact WAF log-group ARN under branch B, PD-15); revision 6 removes `logs:PutResourcePolicy` on `*` (D-A12) |
 | F7 | BI main enforces the opposite of the seed extension | G1.1 Files; V-A10 reframed; research GR-19, K-16 |
 | F8 | NFR-A05 and NFR-A06 untested | gate A-T steps 8a and 8b (revision 6 fixes the rate and defines the dry run) |
 | F9 | Size evidence incomplete | `evidence/render_governance_sizes.py` (real replica names, guard and identity rendered; re-measured in revision 6) |

@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/1-analysis/bmad-create-product-brief (Create mode,
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 7 (2026-10-01: user decisions D-A1…D-A14; readiness round 3)
+revision: 8 (2026-10-01: user decisions D-A1…D-A14; readiness rounds 3-4)
 inputDocuments: [research.md, decisions.md, USI specs/workload-wa-hardening (commit 9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -96,7 +96,9 @@ delivered as its own governed track instead of the single USI story S5.16.
   stack as for USI (D-A9). The WAF log resource policy (D-A5) is
   re-scoped by D-A12: under branch A the human seed operator writes it
   once, account-scoped; under branch B governance writes it
-  resource-scoped, after the log group exists. The governance writes run
+  resource-scoped, after the log group exists, and if WAF log delivery
+  rejects that form, deletes it again through a governance PR (PD-15,
+  PD-16). The governance writes run
   under a dedicated seed-created governance Apply role (D-A11); no
   ConfigRead roles (D-A10).
 - This repository: hygiene, repository controls, the governed pipeline,

@@ -258,7 +258,10 @@
    "Resource": "arn:aws:kms:eu-central-1:891377212104:key/00000000-0000-0000-0000-000000000000"
   },
   {
-   "Action": "logs:PutResourcePolicy",
+   "Action": [
+    "logs:DeleteResourcePolicy",
+    "logs:PutResourcePolicy"
+   ],
    "Effect": "Allow",
    "Resource": "arn:aws:logs:eu-central-1:891377212104:log-group:aws-waf-logs-api-gateway-infrastructure-test"
   },

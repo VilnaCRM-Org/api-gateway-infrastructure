@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-create-epics-and-stories (Creat
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 7 (2026-10-01: readiness round 3 R3-1…R3-6 and nits resolved; rows 21a, 31a-31c)
+revision: 8 (2026-10-01: readiness round 4 R4-1…R4-4 and nits resolved)
 inputDocuments: [prd.md, architecture.md, decisions.md]
 ---
 
@@ -18,7 +18,7 @@ inputDocuments: [prd.md, architecture.md, decisions.md]
   user's acceptance of the four non-exact forms; no question is open);
   reused user decisions D-3, D-6, D-15 (and the D-4 consequence);
   cross-plan change requests CR-A1 and CR-A2; planning defaults
-  PD-1…PD-14: `decisions.md`.
+  PD-1…PD-16: `decisions.md`.
 - External preconditions XP-A1…XP-A14 (gateway-local namespace, PD-1):
   `prd.md` §7.
 - Repositories: AGI = `VilnaCRM-Org/api-gateway-infrastructure` (this
@@ -57,10 +57,10 @@ Every story follows these rules:
 | FR-A15 | G4.2 |
 | FR-A16 | G5.1, G6.1 |
 | FR-A17 | G5.3, G6.2 |
-| FR-A18 | G5.2, G5.3, G6.2 |
+| FR-A18 | G5.2, G5.3, G6.2a (PROD log groups), G6.2 |
 | FR-A19 | G5.4, G6.2 |
 | FR-A20 | G5.5, G6.2 |
-| FR-A21 | G5.2, G6.2 |
+| FR-A21 | G5.2, G6.2a (PROD topic and alarms), G6.2 |
 | FR-A22 | G5.6 |
 | FR-A23 | G6.2a, G6.2, G6.3 |
 | FR-A24 | G0.1, G0.2, G4.1 |
@@ -240,6 +240,11 @@ ConfigRead roles.
       to the Preview, Drift, replication or logging role (round-2 L4);
     - `logs:PutResourcePolicy` on `*` (both branches), and under branch B
       on any log group other than the gateway WAF log group (D-A12);
+    - `logs:DeleteResourcePolicy` on `*`, on an account-scoped policy by
+      `policyName`, and under branch B on any log group other than the
+      gateway WAF log group (PD-15); under branch B, an allow case for
+      `PutResourcePolicy` and `DeleteResourcePolicy` on the exact
+      log-group ARN;
     - `s3:PutObject` on USI's governance checkpoint
       (`governance/.pulumi/stacks/governance/{env}.json`);
     - any IAM action on a USI or BI role.
@@ -567,30 +572,46 @@ ConfigRead roles.
   V-A6 checked); for PROD, G1.8 (row 29) precedes it in the C-BI-A
   chain; the WAF log group created by the CI Apply role (TEST:
   row 21, G5.2; PROD: row 31a, G6.2a). Under branch A this story does not
-  exist (rows 21a and 31b are recorded as not applicable). The seed
-  operator's account-scoped write then took its slot before row 16.
-- **Work:** a governance PR declares `aws.cloudwatch.LogResourcePolicy`
-  with `resource_arn` = the exact
-  `aws-waf-logs-api-gateway-infrastructure-{env}` log-group ARN, which
-  pinned `pulumi_aws` 7.23.0 supports (`cloudwatch/log_resource_policy.py`
-  lines 33-35, 85, 108-111). The policy allows
+  exist (rows 21a and 31b are recorded as not applicable); the seed
+  operator's account-scoped write takes its place (G1.5).
+- **Work:** the shared governance program gains a **closed per-stack
+  config key**, `gateway_waf_log_policy: true|false` (default `false`),
+  on the gateway governance stacks. Only when it is `true` does the
+  program declare `aws.cloudwatch.LogResourcePolicy`. Its `resource_arn`
+  is the exact `aws-waf-logs-api-gateway-infrastructure-{env}` log-group
+  ARN, **built from stack config** (account, region, name), with no
+  lookup; pinned `pulumi_aws` 7.23.0 `cloudwatch/log_resource_policy.py`
+  lines 33-35, 85 and 108-111 support it. The policy allows
   `delivery.logs.amazonaws.com` with `aws:SourceAccount` and
   `aws:SourceArn`. It is applied under the dedicated role, whose ceiling
-  and identity allow `logs:PutResourcePolicy` on exactly that ARN.
-  The program first looks up the log group (`aws.cloudwatch.get_log_group`
-  on the exact name). Governance never creates the log group.
+  and identity allow `logs:PutResourcePolicy` and `DeleteResourcePolicy`
+  on exactly that ARN.
+  - Row 21a is a single-resource PR that sets the key `true` for
+    `test-api-gateway-infrastructure`.
+  - Row 31b does the same for `prod-api-gateway-infrastructure`.
+
+  Until then, every PROD governance plan (rows 26 and 29, BI
+  `pulumi-pr-command-runner.yml` `governance_prod`, lines 288-315)
+  declares nothing for it. Governance never creates the log group.
 - **Acceptance:**
   - P: `DescribeResourcePolicies` shows the resource-scoped policy on the
     log group.
-  - N: the dedicated role is denied `PutResourcePolicy` without
-    `resource_arn` and on any other log group (simulator).
-  - E: the program reads the log group with `aws.cloudwatch.get_log_group`
-    before declaring the policy, so a preview or apply before the log
-    group exists fails at plan time, with no partial write.
+  - N:
+    - the dedicated role is denied `PutResourcePolicy` and
+      `DeleteResourcePolicy` without `resource_arn` (on `*` or an
+      account-scoped policy by `policyName`) and on any other log group;
+      it is allowed both on the exact log-group ARN (simulator, PD-15);
+    - a mock test shows the PROD stack plans no
+      `aws:cloudwatch/logResourcePolicy:LogResourcePolicy` while the key
+      is `false` (rows 26 and 29);
+    - the key in any other stack, or a non-boolean value, fails config
+      loading.
+  - E: if the log group is absent, `PutResourcePolicy` fails in the
+    single-resource row-21a or row-31b PR, with no partial write. Nothing
+    else is in that apply.
 - **STOP:** the log group is absent; V-A6 shows WAF rejecting the
-  resource-scoped policy. Branch A then applies as a recorded consequence
-  of D-A12, through G5.4's contingency rows 23-F3, 23-F1 and 23-F2 (which
-  also remove the branch-B grants); this is no new decision.
+  resource-scoped policy. Branch A then applies through G5.4's
+  contingency rows (PD-16), with no new decision.
 
 ### G1.6 (BI): Gateway CMK (TEST, then PROD)
 
@@ -883,34 +904,69 @@ ConfigRead roles.
   rule without visibility config fails. E: the CommonRuleSet override is
   `count` in TEST until gate A-T step 11.
 - **STOP (D-A12 branch B, V-A6 live):** if the TEST apply shows WAF
-  logging rejecting the resource-scoped policy of row 21a, STOP. This is a
-  recorded consequence of D-A12, not a new decision: a scoped form that
-  WAF does not accept is treated as no usable scoped form, so branch A
-  applies. The **contingency rows** run in this order, then row 23 is
-  retried. No governance role ever holds `logs:DeleteResourcePolicy`.
-  1. **23-F3 (first; TEST only, since row 31b has not run).** The XP-A1
-     human operator deletes the row-21a resource policy out of CI. It is
-     done under a narrowed session in the init pattern of G1.3 step 2a:
+  logging rejecting the resource-scoped policy of row 21a, STOP. Branch A
+  then applies (PD-16, not a new decision). The **contingency rows** run
+  in this order. **Every infrastructure change goes through the automated GitHub PR
+  CI, except the reviewed seed-operator procedures: the 23-F1 seed
+  change-set install and the 23-F2 write, which is branch A's
+  user-decided seed-operator write (D-A12).**
+  1. **23-F3 (first; TEST only, since row 31b has not run).** A reviewed
+     governance PR sets `gateway_waf_log_policy: false` (removing the
+     declaration). It runs through `/pulumi test plan` and `/pulumi test
+     up`, under the dedicated role, which still holds
      `logs:DeleteResourcePolicy` and `DescribeResourcePolicies` on the
-     exact log-group ARN, plus the gateway governance stack's checkpoint
-     paths. The same session runs `pulumi state delete` of that
-     resource's URN. Both actions have their own per-action authorization
-     and `@Kravalg`'s approval. A reviewed governance PR then removes the
-     G1.5b declaration; its plan shows no change. These steps run while
-     the branch-B read grants still exist.
-  2. **23-F1 (TEST then PROD).** A seed amendment in its own XP-A4 slot
-     (XP-A1) drops the branch-B grants from the dedicated ceiling and
-     identity and from the shared ceilings' `2be63eb2…`, and re-renders
-     to the branch-A sizes (5830; 5387/5397). It is a catalog change in
-     the shared queue. Under CR-A2 every later USI seed module rebases
-     onto its result catalog, and a reviewed PR re-pins
-     `CATALOG_HASHES[env]` after readback.
-  3. **23-F2 (TEST then PROD).** The human seed operator writes the
-     account-scoped policy in its own XP-A4 slot, with branch A's owner
-     and evidence.
+     exact log-group ARN (PD-15). BI's destructive-diff gate does not
+     block it: `scripts/pulumi_ci_guardrails.py` lines 17-30 do not list
+     `aws:cloudwatch/` as critical, and `find_destructive_steps` (lines
+     115-125) flags only critical types. The plan shows exactly one
+     delete of `aws:cloudwatch/logResourcePolicy:LogResourcePolicy`.
+  2. **23-F1 (source packet, then install; TEST half before the retry,
+     PROD half before row 31c).** This is a seed amendment of the
+     G1.1 + G1.2 class:
+     - an amendment module with the pinned baseline and result hashes;
+     - a change-set validator that accepts exactly the in-place Modify
+       rows of the dedicated ceiling and identity and of both shared
+       ceilings' merged `logs:DescribeResourcePolicies` statement (back
+       to `2be63eb2…`);
+     - in each environment's `CATALOG_HASHES` re-pin PR (not the packet
+       PR), an operator change that removes `logs:DescribeResourcePolicies`
+       from the gateway operator documents
+       `GitHubGovernance{Preview,Drift}-{env}-api-gateway-infrastructure-*`
+       (G1.3). Catalog and grant then change in the same commit, so the
+       two-direction coverage test passes at every commit, and no branch-B
+       read grant is left under branch A;
+     - the PROD half has its own packet: its amendment module is written
+       on the PROD catalog that is current at its slot (after USI's PROD
+       seed modules, rows 47-50), not reused from the TEST half. The
+       CR-A2 rule that later USI seed modules rebase onto 23-F1 applies
+       per environment;
+     - tests, and a seed review.
 
-  Row 31b then does not apply. G6.2 takes the PROD account-scoped write
-  from 23-F2.
+     It drops all three branch-B `logs:` actions (`PutResourcePolicy`,
+     `DeleteResourcePolicy`, `DescribeResourcePolicies`) and re-renders
+     to the branch-A sizes (5830; 5387/5397). The human seed operator
+     installs it in its own XP-A4 slot (XP-A1). It is a catalog change
+     in the shared queue: under CR-A2 every later USI seed module rebases
+     onto its result catalog, and its TEST half lands after the S4.6 step-20 seed amendments of USI row 43 (S5.5/S5.18b) are installed and pinned and before USI row 45 (the queue stays one-open). A
+     reviewed PR re-pins `CATALOG_HASHES[env]` after readback.
+  3. **23-F2 (TEST half before the retry, PROD half before row 31c).**
+     The human seed operator writes the account-scoped policy in its own
+     XP-A4 slot, with branch A's owner and evidence. This is the
+     fallback position of branch A's write; the normal branch-A position
+     is before row 16.
+
+  Row 23 is retried after the TEST halves of 23-F3, 23-F1 and 23-F2. Row
+  31b then does not apply, and the PROD halves run before row 31c (G6.2
+  takes the PROD account-scoped write from 23-F2).
+
+  If TEST passes but PROD WAF logging rejects the row-31b policy at row
+  31c (not expected, since TEST is the evidence for V-A6), the same
+  sequence runs in PROD: a PROD 23-F3 governance PR (`/pulumi prod
+  plan|up`) sets the PROD key `false` and deletes the policy through CI,
+  then the PROD halves of 23-F1 and 23-F2 run, then row 31c is retried.
+  The D-A12 branch is then per environment: TEST stays on branch B (its
+  row-21a policy, key and `logs:` grants remain), and PROD ends on
+  branch A (PD-16).
 
 ### G5.5 (AGI): Custom domain and DNS
 
@@ -945,9 +1001,11 @@ ConfigRead roles.
 ### G6.1 (AGI): PROD backend contract pin
 
 - **Needs:** G5.6, G4.2, G1.8; XP-A7 (PROD descriptor, row 28); D-A8.
-- **Acceptance:** as G5.1 for PROD, with the contract pinned and
-  `features.front_door` still `false`; G6.2a sets `observability`, and
-  G6.2 sets `true`.
+- **Acceptance:** the offline checks of G5.1 for PROD (schema, account,
+  region, derivation, certificate), with the contract pinned and
+  `features.front_door` still `false`. The live contract checks of AD-A3
+  first run at row 31a (G6.2a, `observability`), and G6.2 then sets
+  `true`.
 
 ### G6.2a (AGI): PROD observability apply (row 31a)
 
@@ -966,7 +1024,10 @@ ConfigRead roles.
     configuration.
   - N: `observability` in `test` is refused (TEST built its modules story
     by story).
-  - E: under branch A this step may be merged with G6.2 by the gateway
+  - E: a Pulumi-mock test shows that `features.front_door: observability`
+    and `true` produce identical URNs and parents for every observability
+    resource (log groups, topic, alarms), so G6.2 updates nothing created
+    here. Under branch A this step may be merged with G6.2 by the gateway
     owner; it is kept separate so the order holds for both branches.
 
 ### G6.2 (AGI): PROD front door, gate A-P (row 31c)
@@ -980,8 +1041,10 @@ ConfigRead roles.
   CommonRuleSet in block from the start with the TEST overrides.
 - **Acceptance:** P: `/pulumi prod plan` and `up` after the same head's
   TEST up; all FR-A16…FR-A21 resources. N: `prod up` without the TEST up
-  of that head is refused. E: the D-A7 values are in the PR, with their
-  G5.6 evidence and the user's confirmation.
+  of that head is refused; the plan contains no delete or replace of any
+  `aws:cloudwatch/logGroup` (the row-31a log groups are kept). E: the
+  D-A7 values are in the PR, with their G5.6 evidence and the user's
+  confirmation.
 
 ### G6.3 (AGI): PROD acceptance, drift and probe
 
@@ -1001,7 +1064,7 @@ ConfigRead roles.
 
 | # | Story | Repo | Kind |
 | --- | --- | --- | --- |
-| 0 | D-A1…D-A14 recorded (2026-10-01); D-3, D-6, D-15 (and the D-4 consequence) reused from the USI bundle; no open question; CR-A1 and CR-A2 sent to the USI owner; PD-1…PD-14 recorded | user | done (decisions.md) |
+| 0 | D-A1…D-A14 recorded (2026-10-01); D-3, D-6, D-15 (and the D-4 consequence) reused from the USI bundle; no open question; CR-A1 and CR-A2 sent to the USI owner; PD-1…PD-16 recorded | user | done (decisions.md) |
 | 1 | G0.1 legacy stack inventory (XP-A9; D-A6) | AGI owner | read-only |
 | 2 | G2.1 hygiene | AGI | C-controls head, C-pipeline head |
 | 3 | G3.1 toolchain and stack skeleton | AGI | C-pipeline, C-program head |
@@ -1041,7 +1104,7 @@ ConfigRead roles.
 Revision 1's rows 26-28 (G1.9, G5.7, G5.8, which existed only under
 OQ-8 (a)) are removed by D-A2. Its rows 29-35 are now rows 26-32.
 
-**No forward dependencies (checked over all 36 rows: 0-32 with 21a, 31a, 31b and 31c in place of 31; true under both D-A12 branches — under branch A, rows 21a and 31b are not applicable and nothing depends on them).** Every
+**No forward dependencies (checked by `evidence/check_ordered_list.py` over all 36 rows; the two branch-B fallback orders, found in TEST or only in PROD, are model checks whose contingency edges the script encodes from the bullet below: 0-32 with 21a, 31a, 31b and 31c in place of 31; true under both D-A12 branches. Under branch A, rows 21a and 31b are not applicable and nothing depends on them. Under branch B, the per-stack key `gateway_waf_log_policy` keeps the PROD policy out of every governance plan before row 31b, including rows 26 and 29.)** Every
 story's "Needs" names only lower-numbered rows, user decisions (D-A…),
 external preconditions (XP-A…) or verification items. No question is
 open.
@@ -1062,7 +1125,7 @@ open.
 - G5.1 (20) needs 15, 18 and 19.
 - G5.2 (21) needs 20 and 17.
 - G5.3 (22) needs 21 and 16.
-- G1.5b TEST (21a, branch B) needs 16 and 21.
+- G1.5b TEST (21a, branch B) needs 16 and 21. Its declaration is gated per stack, so no PROD plan before 31b declares the PROD policy.
 - G5.4 (23) needs 22 and 16, and under branch B also 21a.
 - G5.5 (24) needs 23.
 - G5.6 (25) needs 14 and 24.
@@ -1072,7 +1135,7 @@ open.
 - G6.1 (30) needs 25, 27, 28 and 29.
 - G6.2a (31a) needs 30.
 - G1.5b PROD (31b, branch B) needs 16, 29 (C-BI-A order) and 31a.
-- Contingency rows 23-F3, 23-F1 and 23-F2, in that order (branch B, V-A6 failing live), run after 21a and 22 and before the retry of 23.
+- Contingency rows 23-F3, 23-F1 and 23-F2, in that order (branch B, V-A6 failing live): their TEST halves run after 21a and 22 and before the retry of 23; their PROD halves (23-F1, 23-F2) run after 31a and before 31c. If only PROD rejects the policy at 31c, a PROD 23-F3 runs after 31b, then the PROD halves of 23-F1 and 23-F2, then 31c is retried. No step depends on a later row.
 - G6.2 (31c) needs 31a, and under branch B also 31b.
 - G6.3 (32) needs 31c.
 

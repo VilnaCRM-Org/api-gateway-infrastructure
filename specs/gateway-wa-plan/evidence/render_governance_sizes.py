@@ -198,7 +198,9 @@ def branch_b_statements(env: str) -> list[dict]:
     read the governance refresh needs (no resource-level support, V-A8)."""
     return [
         {
-            "Action": "logs:PutResourcePolicy",
+            # Revision 8 (R4-2): the exact-ARN delete keeps the branch-B
+            # contingency (23-F3) inside CI.
+            "Action": ["logs:DeleteResourcePolicy", "logs:PutResourcePolicy"],
             "Effect": "Allow",
             "Resource": f"arn:aws:logs:eu-central-1:{ACCOUNTS[env]}:log-group:aws-waf-logs-{P}-{env}",
         },
