@@ -1,0 +1,105 @@
+name: Pulumi PR Guardrails
+
+# G3.3 guardrails (AD-A10, AD-A11, AD-A15, FR-A11). Every job runs on every
+# pull request, forks included, with contents: read only and no secret, and
+# runs make targets only. The preview and the gates that read it run in the
+# app-offline compose service: no network, no AWS variable, a fresh local
+# file backend and the image's preinstalled, checksum-verified `aws` plugin.
+# Each job name is a required check of the main ruleset (G2.2).
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  structural_preview:
+    name: Structural Preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the development image
+        run: make build
+
+      - name: Structural Preview
+        run: make test-structural-preview
+
+  destructive_diff:
+    name: Destructive Diff Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the development image
+        run: make build
+
+      - name: Destructive Diff Gate
+        run: make test-destructive-diff
+
+  iam_gate:
+    name: IAM Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the development image
+        run: make build
+
+      - name: IAM Gate
+        run: make test-iam-gate
+
+  policy:
+    name: Policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the development image
+        run: make build
+
+      - name: Policy
+        run: make test-policy
+
+  contract_schema:
+    name: Contract Schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the development image
+        run: make build
+
+      - name: Contract Schema
+        run: make test-contract-schema
