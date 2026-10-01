@@ -576,3 +576,101 @@ def test_v_a5_fallback_is_not_accepted_without_a_reviewed_rule() -> None:
     """`TLS_1_2` needs a recorded reason the plan does not locate (G5.5)."""
     graph = with_props(front_door(), DOMAIN, securityPolicy="TLS_1_2")
     assert policies(evaluate(graph)) == ["domain-tls-policy-strict"]
+
+
+# --- G3.3 audit: v2 mappings and domains, the stack's own group, known values -------
+
+V2_MAPPING = P + "aws:apigatewayv2/apiMapping:ApiMapping::root"
+
+
+def v2_mapping(**deps) -> Resource:
+    return Resource(
+        V2_MAPPING,
+        g.API_MAPPING,
+        {"stage": "live", "apiId": UNKNOWN, "domainName": "user.example.com"},
+        {
+            "stage": frozenset({STAGE}),
+            "apiId": frozenset({API}),
+            **{k: frozenset(v) for k, v in deps.items()},
+        },
+    )
+
+
+def test_e_v2_api_mapping_to_a_protected_stage_passes() -> None:
+    assert evaluate(without(front_door(), MAPPING) | {V2_MAPPING: v2_mapping()}) == []
+
+
+def test_n_v2_api_mapping_to_an_unprotected_stage_fails() -> None:
+    graph = without(front_door(), MAPPING, ASSOC) | {V2_MAPPING: v2_mapping()}
+    assert policies(evaluate(graph)) == ["mapped-stage-has-one-web-acl"]
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {"securityPolicy": "TLS_1_2", "endpointType": "REGIONAL"},
+        {"securityPolicy": g.TLS_SECURITY_POLICY},
+        None,
+    ],
+)
+def test_n_v2_domain_fails(configuration) -> None:
+    domain = Resource(
+        P + "aws:apigatewayv2/domainName:DomainName::v2",
+        g.DOMAIN_NAME_V2,
+        {"domainNameConfiguration": configuration},
+    )
+    assert g.domain_violations(domain)
+    graph = front_door() | {domain.urn: domain}
+    assert policies(evaluate(graph)) == ["domain-tls-policy-strict"]
+
+
+def restacked(graph: dict[str, Resource], stack: str) -> dict[str, Resource]:
+    """The graph with every URN moved to `stack` (log group names unchanged)."""
+
+    def move(urn: str) -> str:
+        return urn.replace("urn:pulumi:ci::", f"urn:pulumi:{stack}::")
+
+    return {
+        move(urn): Resource(
+            move(r.urn),
+            r.type,
+            r.props,
+            {k: frozenset(map(move, v)) for k, v in r.deps.items()},
+        )
+        for urn, r in graph.items()
+    }
+
+
+@pytest.mark.parametrize("stack", ["test", "prod", "other"])
+def test_n_stage_logging_to_another_stacks_group_fails(stack: str) -> None:
+    found = evaluate(restacked(front_door(), stack))
+    assert policies(found) == ["stage-access-logs"]
+
+
+def test_access_log_group_name_comes_from_the_urn() -> None:
+    assert g.access_log_group_name(STAGE) == ACCESS_NAME
+    assert g.access_log_group_name("not-a-urn") is None
+
+
+def test_n_known_foreign_destination_beats_a_dependency() -> None:
+    graph = with_props(
+        front_door(),
+        STAGE,
+        accessLogSettings={
+            "destinationArn": "arn:aws:logs:eu-central-1:111111111111:log-group:x",
+            "format": "{}",
+        },
+    )
+    assert policies(evaluate(graph)) == ["stage-access-logs"]
+
+
+def test_n_known_foreign_association_arn_beats_a_dependency() -> None:
+    graph = with_props(
+        front_door(), ASSOC, resourceArn="arn:aws:apigateway:eu-central-1::/x"
+    )
+    assert policies(evaluate(graph)) == ["mapped-stage-has-one-web-acl"]
+
+
+def test_n_known_foreign_stage_name_beats_a_dependency() -> None:
+    graph = with_props(front_door(), MAPPING, stageName="other")
+    assert policies(evaluate(graph)) == ["mapped-stage-has-one-web-acl"]

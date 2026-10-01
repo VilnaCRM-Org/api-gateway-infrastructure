@@ -373,3 +373,16 @@ def test_allowance_helpers_fail_closed_on_odd_states() -> None:
     assert gr._old_deployment_id([{"oldState": {"id": ""}}]) is None
     assert gr._old_deployment_id([{"oldState": {"id": 7}}]) is None
     assert gr._old_deployment_id([]) is None
+
+
+def test_e_real_replace_with_show_sames_passes(tmp_path: Path) -> None:
+    """`--show-sames` (as the Structural Preview runs) lists unchanged
+    resources with their inputs; the moved stage still allows the replace."""
+    plan = fixture("deployment-replace-cbd-sames")
+    sames = [
+        s
+        for s in plan["steps"]
+        if s["op"] == "same" and gr.step_resource_type(s).startswith("aws:")
+    ]
+    assert sames and all("inputs" in s["newState"] for s in sames)
+    assert gr.cli(["destructive-gate", str(write(tmp_path, plan))]) == 0

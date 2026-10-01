@@ -29,6 +29,15 @@ STAGE = "aws:apigateway/stage:Stage"
 METHOD_SETTINGS = "aws:apigateway/methodSettings:MethodSettings"
 BASE_PATH_MAPPING = "aws:apigateway/basePathMapping:BasePathMapping"
 DOMAIN_NAME = "aws:apigateway/domainName:DomainName"
+# A v2 API mapping can also expose a REST stage on a custom domain, and a v2
+# domain is a domain too; the rules cover both.
+API_MAPPING = "aws:apigatewayv2/apiMapping:ApiMapping"
+DOMAIN_NAME_V2 = "aws:apigatewayv2/domainName:DomainName"
+# Mapping type: (property naming the stage, property naming the API).
+MAPPINGS = {
+    BASE_PATH_MAPPING: ("stageName", "restApi"),
+    API_MAPPING: ("stage", "apiId"),
+}
 INTEGRATION = "aws:apigateway/integration:Integration"
 WEB_ACL_ASSOCIATION = "aws:wafv2/webAclAssociation:WebAclAssociation"
 LOG_GROUP = "aws:cloudwatch/logGroup:LogGroup"
@@ -43,11 +52,10 @@ SSM_PREFIX = "aws:ssm/"
 # the fallback needs its own reviewed rule change (C-policy) in G5.5.
 TLS_SECURITY_POLICY = "SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09"
 ENDPOINT_ACCESS_MODE = "STRICT"
-# AD-A5: `/aws/apigateway/api-gateway-infrastructure-{env}/access`, for the
-# three stacks of AD-A15.
-ACCESS_LOG_GROUP = re.compile(
-    r"/aws/apigateway/api-gateway-infrastructure-(?:ci|test|prod)/access"
-)
+# AD-A5: `/aws/apigateway/api-gateway-infrastructure-{env}/access`, where
+# {env} is the stack (AD-A15: ci, test, prod) of the stage's URN.
+STACKS = ("ci", "test", "prod")
+_URN_STACK = re.compile(r"urn:pulumi:([^:]+)::")
 ALL_METHODS = "*/*"
 LOGGING_OFF = "OFF"
 RUNBOOK_TAG = "runbook"
@@ -107,13 +115,22 @@ def rest_api_violations(resource: Resource) -> list[str]:
 
 
 def domain_violations(resource: Resource) -> list[str]:
-    """Every domain uses the AD-A4 TLS policy and `STRICT`."""
-    if resource.type != DOMAIN_NAME:
+    """Every domain uses the AD-A4 TLS policy and `STRICT`.
+
+    A v2 domain keeps both in `domainNameConfiguration`; pulumi-aws 7.23.0
+    offers it neither the AD-A4 policy nor an access mode, so it fails.
+    """
+    if resource.type == DOMAIN_NAME:
+        values: Any = resource.props
+    elif resource.type == DOMAIN_NAME_V2:
+        values = resource.get("domainNameConfiguration")
+        values = values if isinstance(values, Mapping) else {}
+    else:
         return []
     found = []
-    if resource.get("securityPolicy") != TLS_SECURITY_POLICY:
+    if values.get("securityPolicy") != TLS_SECURITY_POLICY:
         found.append(f"A custom domain must use security_policy {TLS_SECURITY_POLICY}.")
-    if resource.get("endpointAccessMode") != ENDPOINT_ACCESS_MODE:
+    if values.get("endpointAccessMode") != ENDPOINT_ACCESS_MODE:
         found.append(
             f"A custom domain must use endpoint_access_mode {ENDPOINT_ACCESS_MODE}."
         )
@@ -208,64 +225,83 @@ RESOURCE_RULES: tuple[tuple[str, str, Callable[[Resource], list[str]]], ...] = (
 # --- links between resources --------------------------------------------------
 
 
-def _same_reference(left: Resource, right: Resource, name: str) -> bool:
-    """True when both resources' property `name` names the same thing."""
-    value = left.get(name)
-    if known(value) and value == right.get(name):
-        return True
-    return bool(left.deps.get(name, frozenset()) & right.deps.get(name, frozenset()))
+def _same_reference(left: Resource, lname: str, right: Resource, rname: str) -> bool:
+    """True when `left.lname` and `right.rname` name the same thing.
+
+    Two known values must be equal; otherwise the two properties must depend
+    on a common resource.
+    """
+    lvalue, rvalue = left.get(lname), right.get(rname)
+    if known(lvalue) and known(rvalue):
+        return lvalue == rvalue
+    return bool(left.deps.get(lname, frozenset()) & right.deps.get(rname, frozenset()))
 
 
-def _names_stage(resource: Resource, stage: Resource) -> bool:
-    """True when `resource.stageName` (with its `restApi`) is `stage`."""
-    if resource.refers("stageName", stage):
-        return True
-    name = resource.get("stageName")
-    return (
-        known(name)
-        and name == stage.get("stageName")
-        and _same_reference(resource, stage, "restApi")
-    )
+def _names_stage(resource: Resource, stage: Resource, name: str, api: str) -> bool:
+    """True when `resource.<name>` (with `resource.<api>`) is `stage`.
+
+    A known stage name must equal the stage's, on the same API; an unknown
+    one must depend on the stage.
+    """
+    value = resource.get(name)
+    if known(value):
+        return value == stage.get("stageName") and _same_reference(
+            resource, api, stage, "restApi"
+        )
+    return value is UNKNOWN and resource.refers(name, stage)
 
 
 def mapped_stages(mapping: Resource, stages: Sequence[Resource]) -> list[Resource]:
-    """The stages a base path mapping exposes.
+    """The stages a base path (or v2 API) mapping exposes.
 
-    A mapping without a stage name exposes every stage of its API (callers
-    pick the stage in the path), so it references all of them.
+    A base path mapping without a stage name exposes every stage of its API
+    (callers pick the stage in the path), so it references all of them.
     """
-    if mapping.get("stageName") is None:
-        return [s for s in stages if _same_reference(mapping, s, "restApi")]
-    return [s for s in stages if _names_stage(mapping, s)]
+    name, api = MAPPINGS[mapping.type]
+    if mapping.get(name) is None:
+        return [s for s in stages if _same_reference(mapping, api, s, "restApi")]
+    return [s for s in stages if _names_stage(mapping, s, name, api)]
 
 
 def associated(association: Resource, stage: Resource) -> bool:
-    """True when a web ACL association targets `stage`."""
-    if association.refers("resourceArn", stage):
-        return True
+    """True when a web ACL association targets `stage`.
+
+    A known `resourceArn` must be the stage's ARN; an unknown one must
+    depend on the stage.
+    """
     arn = association.get("resourceArn")
-    return known(arn) and arn == stage.get("arn")
+    if known(arn):
+        return arn == stage.get("arn")
+    return association.refers("resourceArn", stage)
 
 
-def _access_log_groups(stage: Resource, groups: Sequence[Resource]) -> list[Resource]:
-    settings = stage.get("accessLogSettings")
-    destination = (
-        settings.get("destinationArn") if isinstance(settings, Mapping) else None
-    )
-    linked = []
-    for group in groups:
-        name = group.get("name")
-        if (
-            stage.refers("accessLogSettings", group)
-            or (known(destination) and destination == group.get("arn"))
-            or (
-                known(destination)
-                and known(name)
-                and str(destination).endswith(f":log-group:{name}")
-            )
-        ):
-            linked.append(group)
-    return linked
+def _access_log_groups(
+    destination: Any, stage: Resource, groups: Sequence[Resource]
+) -> list[Resource]:
+    """The log groups a stage's access-log destination names.
+
+    A known destination must be the group's ARN; an unknown one must depend
+    on the group.
+    """
+    if not known(destination):
+        return [g for g in groups if stage.refers("accessLogSettings", g)]
+    return [
+        g
+        for g in groups
+        if destination == g.get("arn")
+        or (
+            known(g.get("name"))
+            and str(destination).endswith(f":log-group:{g.get('name')}")
+        )
+    ]
+
+
+def access_log_group_name(urn: str) -> str | None:
+    """The AD-A5 access log group of the stack in `urn`, if it is a stack."""
+    match = _URN_STACK.match(urn)
+    if match is None or match[1] not in STACKS:
+        return None
+    return f"/aws/apigateway/api-gateway-infrastructure-{match[1]}/access"
 
 
 # --- stack rules --------------------------------------------------------------
@@ -287,8 +323,9 @@ def stage_access_log_findings(resources: Sequence[Resource]) -> list[Finding]:
         if destination is None or destination == "":
             found.append((stage.urn, "A stage must set an access-log destination."))
             continue
-        names = [g.get("name") for g in _access_log_groups(stage, groups)]
-        if not any(known(n) and ACCESS_LOG_GROUP.fullmatch(str(n)) for n in names):
+        expected = access_log_group_name(stage.urn)
+        names = [g.get("name") for g in _access_log_groups(destination, stage, groups)]
+        if expected is None or expected not in names:
             found.append(
                 (
                     stage.urn,
@@ -328,7 +365,8 @@ def stage_method_settings_findings(resources: Sequence[Resource]) -> list[Findin
             found.append((item.urn, f"Method settings: {problem}."))
     for stage in _by_type(resources, STAGE):
         if not any(
-            m.get("methodPath") == ALL_METHODS and _names_stage(m, stage)
+            m.get("methodPath") == ALL_METHODS
+            and _names_stage(m, stage, "stageName", "restApi")
             for m in method_settings
         ):
             found.append(
@@ -351,13 +389,13 @@ def mapped_stage_web_acl_findings(resources: Sequence[Resource]) -> list[Finding
     associations = _by_type(resources, WEB_ACL_ASSOCIATION)
     found: list[Finding] = []
     mapped: dict[str, Resource] = {}
-    for mapping in _by_type(resources, BASE_PATH_MAPPING):
+    for mapping in _by_type(resources, *MAPPINGS):
         targets = mapped_stages(mapping, stages)
         if not targets:
             found.append(
                 (
                     mapping.urn,
-                    "A base path mapping must reference a stage of this stack.",
+                    "A domain mapping must reference a stage of this stack.",
                 )
             )
         mapped.update((stage.urn, stage) for stage in targets)
