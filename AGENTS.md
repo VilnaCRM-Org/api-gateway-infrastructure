@@ -13,7 +13,12 @@ Repo-local rules for `api-gateway-infrastructure`, the Pulumi program for the Vi
 
 ### 1. No IAM
 
-Do NOT add `aws.iam.Role`, `aws.iam.Policy`, `aws.iam.RolePolicy`, `aws.iam.OpenIdConnectProvider` or any `assume_role_policy` / `sts:AssumeRoleWithWebIdentity` trust to this repository's Pulumi program. The deploy roles are owned by the central governance stack; reference them by name or ARN through stack config and never redefine them.
+Do NOT add `aws.iam.Role`, `aws.iam.Policy`, `aws.iam.RolePolicy`, `aws.iam.OpenIdConnectProvider`, `aws.apigateway.Account` or any `assume_role_policy` / `sts:AssumeRoleWithWebIdentity` trust to this repository's Pulumi program, and no `aws:iam/*` resource of any kind.
+
+Role ownership (D-A1, D-A9, D-A11):
+- The bootstrap-infrastructure (BI) independent seed creates this repository's roles, through a reviewed seed catalog amendment installed by the human seed operator.
+- The central governance stack owns the identity grants, the Pulumi backend and the KMS key, and applies them through the dedicated governance Apply role `GitHubGovernanceApply-api-gateway-infrastructure-{env}`.
+- This repository references the roles by ARN through stack config or environment variables and never redefines them.
 
 ### 2. OIDC only
 
@@ -21,7 +26,9 @@ All AWS credentials in CI come from GitHub OIDC role assumption. Never commit or
 
 ### 3. Stack-config pins
 
-Account IDs, role ARNs, the Pulumi backend URL, the secrets provider and the region live in stack config and repository environment variables, never in Python program code. Each stack pins only its own account. Every `uses:` in a workflow is pinned to a 40-hex commit SHA with the tag in a trailing comment.
+Account IDs, role ARNs, the Pulumi backend URL, the secrets provider and the region live in stack config and repository environment variables, never in Python program code. Each stack pins only its own account. Every `uses:` in a workflow is pinned to a 40-hex commit SHA.
+
+Exception: the offline `ci` stack (AD-A15) and nothing else. It runs the Structural Preview on a local file backend with no credentials, so it may use dummy static keys (`pulumi-preview`) with `skip_credentials_validation`, `skip_metadata_api_check`, `skip_requesting_account_id` and `skip_region_validation`, and a committed `encryptionsalt` with a fixed non-secret passphrase. The `test` and `prod` stacks reject these settings, and the config loader fails if they appear there.
 
 ### 4. Saved plans
 
@@ -39,9 +46,11 @@ Every change reaches the TEST environment first. A PROD apply requires a success
 
 A Pulumi diff that deletes or replaces a resource blocks the pipeline. Do not add an override label, flag or input that bypasses that block.
 
-### 8. No SSM writes
+The one reviewed exception (AD-A10, FR-A11): replacing `aws:apigateway/deployment:Deployment` is allowed only as a create-before-delete in a plan where the stage moves to the new deployment. Nothing else is exempt.
 
-This repository reads configuration and never writes SSM parameters or any secret store. Do not add `aws.ssm.*` resources or `ssm:Put*` calls.
+### 8. No SSM reads or writes
+
+This repository neither reads nor writes SSM parameters (D-15). Do not add `aws:ssm/*` resources or `ssm:GetParameter*` / `ssm:Put*` calls, and publish nothing in SSM. The gateway certificate ARN is a reviewed contract pin, checked only with `acm:DescribeCertificate`.
 
 ## Secret handling
 

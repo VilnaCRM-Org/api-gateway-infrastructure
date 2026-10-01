@@ -62,15 +62,16 @@ The container never receives static AWS keys: `docker-compose.yml` passes only `
 ```
 make start
 make sh
-aws configure sso          # once; then: aws sso login --use-device-code
+aws configure sso
+aws sso login --use-device-code
 export AWS_PROFILE=<your-sso-profile>
 ```
 
-SSO sessions are short-lived and live only in the container's home directory. CI and deployments never use this path: they use GitHub OIDC roles only. Do not create or export long-lived access keys. See [AGENTS.md](AGENTS.md) for the repository rules.
+SSO sessions are short-lived. Both the SSO configuration and the session live in the container's home directory, so they are lost when the container is recreated and you must configure and log in again. CI and deployments never use this path: they use GitHub OIDC roles only. Do not create or export long-lived access keys. See [AGENTS.md](AGENTS.md) for the repository rules.
 
 ## Releases
 
-Pushes to `main` run `.github/workflows/autorelease.yml`, which derives the next version from conventional commits, then creates the tag and the GitHub release (generated notes) with the job's `GITHUB_TOKEN`. It does not commit to `main`, so `CHANGELOG.md` is no longer updated automatically; the GitHub releases page is the changelog.
+Pushes to `main` run `.github/workflows/autorelease.yml`, which derives the next version from conventional commits, then creates the tag and the GitHub release (generated notes) with the job's `GITHUB_TOKEN`. Below 1.0.0 a breaking change (`type!:` or a `BREAKING CHANGE:` footer) bumps the minor version, not the major. The version logic is `scripts/next_release_version.py`. The workflow does not commit to `main`, so `CHANGELOG.md` is no longer updated automatically; the GitHub releases page is the changelog.
 
 ## Security
 Please disclose any vulnerabilities found responsibly – report security issues to the maintainers privately.

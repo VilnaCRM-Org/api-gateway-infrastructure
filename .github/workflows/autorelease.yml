@@ -29,57 +29,11 @@ jobs:
 
       - name: Compute next version from conventional commits
         id: version
-        run: |
-          set -euo pipefail
-          last="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
-          if [ -n "$last" ]; then
-            range="${last}..HEAD"
-          else
-            last="v0.0.0"
-            range="HEAD"
-          fi
-          subjects="$(git log --format=%s "$range")"
-          bodies="$(git log --format=%b "$range")"
-          major=0; minor=0; patch=0
-          IFS=. read -r major minor patch <<< "${last#v}"
-          bump='none'
-          if printf '%s\n' "$subjects" | grep -Eq '^[a-z]+(\([^)]*\))?!:' \
-            || printf '%s\n' "$bodies" | grep -Eq '^BREAKING[ -]CHANGE:'; then
-            bump='major'
-          elif printf '%s\n' "$subjects" | grep -Eq '^feat(\([^)]*\))?:'; then
-            bump='minor'
-          elif printf '%s\n' "$subjects" | grep -Eq '^fix(\([^)]*\))?:'; then
-            bump='patch'
-          fi
-          # Below 1.0.0 a breaking change bumps the minor version.
-          if [ "$bump" = major ] && [ "$major" -eq 0 ]; then bump='minor'; fi
-          case "$bump" in
-            major) major=$((major + 1)); minor=0; patch=0 ;;
-            minor) minor=$((minor + 1)); patch=0 ;;
-            patch) patch=$((patch + 1)) ;;
-            none)
-              echo "No releasable commits since ${last}; skipping."
-              echo "skipped=true" >> "$GITHUB_OUTPUT"
-              exit 0
-              ;;
-          esac
-          tag="v${major}.${minor}.${patch}"
-          {
-            echo "skipped=false"
-            echo "tag=${tag}"
-            echo "previous=${last}"
-          } >> "$GITHUB_OUTPUT"
+        run: python3 scripts/next_release_version.py
 
       - name: Create tag and GitHub release
         if: steps.version.outputs.skipped == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
-          PREVIOUS: ${{ steps.version.outputs.previous }}
-        run: |
-          set -euo pipefail
-          args=(--target "$GITHUB_SHA" --title "$TAG" --generate-notes)
-          if [ "$PREVIOUS" != "v0.0.0" ]; then
-            args+=(--notes-start-tag "$PREVIOUS")
-          fi
-          gh release create "$TAG" "${args[@]}" --repo "$GITHUB_REPOSITORY"
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
