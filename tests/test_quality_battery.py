@@ -183,6 +183,12 @@ def test_no_bandit_skip_beyond_b101_in_tests() -> None:
     assert "--skip B101 tests" in gate_lines[1]
 
 
+def test_zizmor_requires_a_hash_pin_for_every_action() -> None:
+    config = wc.load((ROOT / ".github" / "zizmor.yml").read_text(encoding="utf-8"), [])
+    policies = config["rules"]["unpinned-uses"]["config"]["policies"]
+    assert policies == {"*": "hash-pin"}
+
+
 def test_zizmor_runs_offline_and_secrets_scan_reads_history() -> None:
     assert "zizmor --offline" in recipe("test-zizmor")
     assert "gitleaks git" in recipe("test-secrets")
