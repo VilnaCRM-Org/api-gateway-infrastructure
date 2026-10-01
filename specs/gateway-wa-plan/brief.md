@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/1-analysis/bmad-create-product-brief (Create mode,
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 1
+revision: 2 (2026-10-01: user decisions D-A1…D-A8 recorded)
 inputDocuments: [research.md, decisions.md, USI specs/workload-wa-hardening (commit 9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -88,14 +88,17 @@ delivered as its own governed track instead of the single USI story S5.16.
 
 **In scope:**
 
-- BI: the gateway's enrolment (seed catalog amendments, independent
-  CloudFormation identity and backend stacks, the boundary, capability
-  grants, the account-level API Gateway logging role, the WAF log
-  resource policy, the gateway CMK).
+- BI: the gateway's enrolment the way USI is enrolled (D-A1): a reviewed
+  seed catalog amendment that creates and registers the gateway roles,
+  their boundaries and guards, installed by the human seed operator; the
+  backend, the capability grants, the account-level API Gateway logging
+  role and setting, the WAF log resource policy (D-A5) and the gateway CMK
+  (D-A4), each by the BI owner that OQ-9 chooses.
 - This repository: hygiene, repository controls, the governed pipeline,
   the certificate (PR #34 amended), the TEST and PROD front door, alarms,
   runbooks.
 - The disposition of PRs #34, #33, #32 and #26.
+- The PROD front door on `user.vilnacrm.com` (D-A3).
 
 **Out of scope:**
 
@@ -111,7 +114,7 @@ delivered as its own governed track instead of the single USI story S5.16.
 
 ## Constraints
 
-- D-3, D-6 and D-15 (decisions.md §1).
+- D-3, D-6 and D-15 (decisions.md §2); D-A1…D-A8 (decisions.md §1).
 - OIDC only; no long-lived keys or personal access tokens in CI.
 - Saved-plan apply; TEST before PROD; `@Kravalg` as the sole approver of
   protected environments.
@@ -122,7 +125,8 @@ delivered as its own governed track instead of the single USI story S5.16.
 ## Assumptions
 
 - **AS-1.** No live gateway resource that this plan needs to keep exists in
-  either account. XP-A9 checks it; OQ-5 decides any finding.
+  either account. XP-A9 checks it; D-A6 retires any finding after an
+  emptiness check.
 - **AS-2.** The USI workload keeps the network contract of
   `specs/poc-api-gateway-backend.md`: internal ALB in two application
   subnets, HTTPS listener on 443 with the gateway certificate, ALB ingress

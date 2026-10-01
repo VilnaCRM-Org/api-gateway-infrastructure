@@ -4,10 +4,10 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-check-implementation-readiness 
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 1
-author: the planning agent that wrote revision 1 (NOT an independent reviewer)
-independent_reviewer: none yet for revision 1
-status: PENDING independent review of revision 1
+revision: 2 (user decisions D-A1…D-A8 recorded; OQ-8 (a)-only rows removed)
+author: the planning agent that wrote revisions 1 and 2 (NOT an independent reviewer)
+independent_reviewer: none yet for revision 2
+status: PENDING independent review of revision 2
 ---
 
 # Implementation readiness
@@ -16,66 +16,81 @@ status: PENDING independent review of revision 1
 
 **Not PASS; pending an independent review.** The author of this file wrote
 the bundle, so this is a self-check, not a gate result. A fresh-context
-pre-commit audit and its recheck ran before the first commit (below). The
-self-check finds the bundle complete enough for an independent readiness
-round, with these blockers for implementation:
+pre-commit audit and its recheck ran on revision 2 before its commit
+(below). The self-check finds the bundle complete enough for an
+independent readiness round. These items block implementation:
 
-- **Rows blocked by open user questions** (each row's "Needs"): OQ-1 →
-  row 8 and every later BI row; OQ-2 → rows 17, 21; OQ-3 → rows 29, 30,
-  32-35; OQ-4 → rows 16 (WAF-log part), 23; OQ-6 → row 34; OQ-7 → rows
-  19, 20, 31, 33; OQ-8 → the timing of rows 19-25 and the existence of
-  rows 26-28. OQ-5 decides only the outcome of row 1.
-- **Rows blocked by external preconditions:** XP-A1 (rows 8, 10, 11,
-  16-18, 26, 29, 32 and every stack amendment), XP-A3 (rows 12 and, under OQ-8 (a), 26), XP-A4 (every
-  seed slot), XP-A5 (rows 16, 22), XP-A6 (row 15), XP-A7 (rows 19, 31),
-  XP-A10 (row 21), XP-A12 (row 16), XP-A13 (all implementation), XP-A14
-  (rows 19, 27, 28).
-- **Cross-plan ordering** (architecture AD-A12): row 15 before USI row
-  42; rows 19-25 after USI S4.6 step 20 and before step 17 (which USI
-  would run after step 20 under OQ-8 (c)), or between steps 2 and 17
-  with rows 26-28 around steps 18-20 (OQ-8 (a)); row 30 before USI row
-  49; rows 31-35 after USI row 52.
+- **Rows blocked by open user questions** (each row's "Needs"):
+  - OQ-9 → rows 8, 10, 11, 16, 17, 18, 26 and 29;
+  - OQ-10 → rows 8, 9 and 13.
+- **Row blocked by a verification item:** V-A10 (the BI owner accepts the
+  seed inventory extension) → row 8.
+- **Rows blocked by external preconditions:**
+  - XP-A1 → row 9, and every seed operation that OQ-9 puts in rows 10,
+    11, 16-18, 26 and 29;
+  - XP-A3 → row 12;
+  - XP-A4 → every seed slot;
+  - XP-A5 → rows 16 and 22;
+  - XP-A6 → row 15;
+  - XP-A7 → rows 19 and 28;
+  - XP-A10 → row 21;
+  - XP-A11 → rows 26 and 27;
+  - XP-A12 → row 16;
+  - XP-A13 → all implementation;
+  - XP-A14 → rows 19 and 25.
+- **Cross-plan request:** CR-A1 must be accepted by the USI owner before
+  row 19 starts and before the row-25 hand-off.
+- **Cross-plan ordering** (architecture AD-A12):
+  - row 15 before USI row 42;
+  - rows 19-25 after USI S4.6 step 20 and before step 17, which USI runs
+    after step 20 and holds for gate A-T step 10 (CR-A1);
+  - row 27 before USI row 49;
+  - rows 28-32 after USI row 52.
 
-## Checks performed (self-check, after the audit fixes)
+## Checks performed (self-check, revision 2)
 
 | Check | Result |
 | --- | --- |
-| Every FR and NFR has at least one story (epics FR coverage map) | yes: 25 FRs, 11 NFRs |
-| PRD §1 counts equal the tables | 25 + 11 = 36; offline 23 FRs + 8 NFRs = 31; live-only FRs 2; evidence-only NFRs 3; offline FRs with live evidence 18 (recomputed from the Risk column) |
-| Ordered list has no forward dependency | yes, rows 0-35, including test, ownership and feature-flag levels (epics "No forward dependencies") |
-| Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8, which reuse the G1.4a and G1.4b matrices in PROD, and G5.8, which re-runs listed gate A-T steps |
-| No story narrows an existing seed guard statement on Resource `*` | yes, under OQ-1 (a); OQ-1 (b) is the user's to choose |
-| No CI role gets `ssm:*`, `iam:*`, `iam:PassRole`, `iam:CreateServiceLinkedRole` | yes (AD-A7 deny set; G1.4a and G1.4b matrices) |
+| Every FR and NFR has at least one story (epics FR coverage map) | yes: 25 FRs, 11 NFRs; FR-A25 now maps to G5.1 and G5.6 |
+| PRD §1 counts equal the tables | 25 + 11 = 36; offline 23 FRs + 8 NFRs = 31; live-only FRs 2; evidence-only NFRs 3; offline FRs with live evidence 18 (recomputed from the Risk column; FR-A25's Risk is now C, L) |
+| Ordered list has no forward dependency | yes, rows 0-32 (33 rows), including test, ownership and feature-flag levels (epics "No forward dependencies") |
+| Rows 26-28 of revision 1 removed, later rows renumbered | yes: G1.9, G5.7, G5.8 removed; rows 29-35 → 26-32; every in-bundle reference to a gateway row re-checked (USI row numbers unchanged) |
+| No OQ-8 (a) remnant | yes: no recovery role, `test-recovery` environment, teardown manifest, recovery guardrail mode or `detached` flag remains |
+| Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8, which reuse the G1.4a and G1.4b matrices in PROD |
+| D-A1 honoured: the gateway roles enter through a reviewed seed catalog amendment installed by the human seed operator; the governance-stack route is not used for role creation; the independent CloudFormation owner is not the chosen route | yes (AD-A1, FR-A01, FR-A02, G1.1, G1.2). The departures from USI are listed in AD-A1: role creation by the seed (D-A1), OQ-9, OQ-10 and the stricter trust (PD-14) |
+| No story narrows an existing seed guard statement on Resource `*` | yes. Only OQ-9 (b) would extend two `NotResource` lists and three governance ceilings by exact gateway entries, and only if the user chooses it |
+| No CI role gets `ssm:*`, `iam:*`, `iam:PassRole`, `iam:CreateServiceLinkedRole` | yes (AD-A7 deny set; AD-A1 guards; G1.4a and G1.4b matrices) |
 | D-15 honoured: no SSM write or read anywhere | yes (AD-A2 drops PR #34's parameter; the policy pack refuses `aws:ssm/*`) |
 | D-3 honoured: REST API + WAF + VPC link V2 → ALB; NLB only as reviewed fallback | yes (AD-A4, V-A1) |
-| Gate order against USI gates stated, including the USI abandon rehearsal | yes (AD-A12 table; OQ-8) |
+| D-A2…D-A8 applied | yes: D-A2 (FR-A25, AD-A3, AD-A12, CR-A1); D-A3 (FR-A15, AD-A8, XP-A11, G1.7, G4.2); D-A4 (FR-A06, AD-A14); D-A5 (FR-A05, AD-A9, V-A6); D-A6 (G0.1, FR-A24); D-A7 (FR-A18, AD-A5, G6.2); D-A8 (AD-A3, XP-A7, G5.1, G6.1) |
+| Gate order against USI gates stated, including the USI abandon rehearsal | yes (AD-A12 table; CR-A1) |
 | Every AWS claim cites a source | yes (research §5, GA-1…GA-17) |
-| Every repository claim cites file and line or a read-only API call | yes (research §2-§4) |
-| Long-lived secrets | none created; the App private key use is dropped (PD-11); no PAT |
+| Every repository claim cites file and line or a read-only API call | yes (research §2-§4; GR-18…GR-20 added for D-A1) |
+| Long-lived secrets | none created; the App private key use is dropped (PD-11); no PAT. Under OQ-10 (b) or (c) the plan would add fixed CI secrets, as USI has |
 
 ## User decisions
 
-Reused, dated 2026-09-30: D-3, D-6, D-15 and the D-4 consequence
-(`decisions.md` §1). No new user decision was invented; every choice the
-plan needed and the user has not made is an OQ or a labelled planning
-default.
+- **Gateway decisions, dated 2026-10-01:** D-A1…D-A8 (`decisions.md` §1).
+  They answer OQ-1…OQ-8. The namespace is gateway-local, `D-A#` (PD-1).
+- **Reused, dated 2026-09-30:** D-3, D-6, D-15 and the D-4 consequence
+  (`decisions.md` §2).
+- No other user decision was invented. Every choice the plan needed and
+  the user has not made is an OQ or a labelled planning default.
 
 ## Remaining user decisions
 
-| ID | Question | Recommendation |
+| ID | Question | Options (no choice made by this plan) |
 | --- | --- | --- |
-| OQ-1 | Enrolment route for the gateway CI identities | (a) independent CloudFormation owner; no guard narrowed |
-| OQ-2 | KMS key for gateway log groups and topic | (a) dedicated BI-owned gateway CMK per environment |
-| OQ-3 | PROD FQDN and zone owner | name them; the zone in PROD account `933245420672` |
-| OQ-4 | WAF log resource policy | (a) BI pre-creates it; never default to `logs:PutResourcePolicy` on `*` |
-| OQ-5 | Legacy stack or `my-bucket`, if found | (a) retire after an emptiness check |
-| OQ-6 | PROD throttle and WAF rate values | from the G5.6 TEST evidence, confirmed in the G6.2 PR |
-| OQ-7 | Provenance of the USI descriptor | (a) the gateway's live re-verification is the authority |
-| OQ-8 | TEST front door vs the USI abandon rehearsal | (c) USI runs S4.6 step 17 after step 20; (a) if the USI plan must stay unchanged |
+| OQ-9 | Which BI owner writes the gateway's identity grants, backend, CMK and account-level prerequisites after the seed creates the roles | (a) the seed stack; (b) governance, after the G1.2 change set extends the governance guard's two `NotResource` lists by exact ARNs (#284 precedent) widens the three governance seed ceilings (Apply, Preview, Drift) by exact gateway S3, KMS, IAM-attach, `iam:PassRole`, `/account` and WAF-log-policy entries, and amends the five operator executor guards and the operator bindings that name the governance policies; (c) the seed for grants, plus independent BI stacks for the non-identity resources |
+| OQ-10 | Whether the gateway gets USI's ConfigRead roles and fixed CI secrets | (a) none (protected-environment variables); (b) readers for `test`, `prod-preview` and `prod`, each with one environment subject; (c) the full USI mirror, including the `pull_request` reader |
 
-The planning defaults PD-1…PD-13 are not decisions; the user may change
-any of them. A conditional decision appears only if V-A7 fails (an
-account-wide ACM metadata read, AD-A7).
+**Cross-plan request for the USI owner:** CR-A1. USI S4.6 step 17 runs
+after step 20 and is held for gate A-T step 10 (two weekday drift runs).
+
+The planning defaults PD-1…PD-14 are not decisions; the user may change any
+of them. A conditional decision appears only if V-A7 fails (an
+account-wide ACM metadata read, AD-A7) or if V-A6 fails (WAF log delivery
+without `logs:PutResourcePolicy`; D-A5 excludes the `*` grant).
 
 ## Unresolved external prerequisites
 
@@ -83,33 +98,54 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 
 | Role | Items |
 | --- | --- |
-| BI owner | G1.x authorship; XP-A4 slot ordering with the USI queue; XP-A5 and XP-A12 read-backs; the G5.7 ENI read-back under OQ-8 (a) |
-| Seed operator | G1.1 and every conditional catalog amendment (G1.4a, G1.4b, G1.7, G1.9) |
-| Reviewed installer (XP-A1, widened) | every independent stack install and amendment |
+| BI owner | G1.x authorship; V-A10 (accepting the seed inventory extension); XP-A4 slot ordering with the USI queue; XP-A5 and XP-A12 read-backs |
+| Human seed operator (XP-A1) | G1.2 install, trust activation and pin evidence; every later seed amendment that OQ-9 makes a seed operation |
+| Reviewed installer (XP-A1, only under OQ-9 (c)) | the independent non-identity stacks |
 | `@Kravalg` | seed and stack reviews, BI and AGI PR approvals, every protected-environment apply, XP-A3 admin apply |
-| Gateway owner | G0.1, the certificate hand-offs (XP-A8), PR #34 amendment coordination |
-| USI owner | XP-A7 descriptors; pinning the gateway ARNs (USI XP-10, XP-15); XP-A14 campaign coordination; the USI-side S4.6 reorder under OQ-8 (c) |
-| User | OQ-1…OQ-8, XP-A10 endpoints, per-action authorizations |
+| Gateway owner | G0.1 and the D-A6 emptiness check, the certificate hand-offs (XP-A8), PR #34 amendment coordination |
+| USI owner | CR-A1; XP-A7 descriptors (TEST after S4.6 step 20); pinning the gateway ARNs (USI XP-10, XP-15); XP-A14 campaign coordination |
+| Owner of the `vilnacrm.com` PROD zone | XP-A11: the zone exists or is created in account `933245420672`; the zone id and the record permission |
+| User | OQ-9, OQ-10, XP-A10 endpoints, the D-A7 PROD values in the G6.2 PR, per-action authorizations |
 
 ## Skill applicability (devops-sdlc)
 
 | Skill | Applies to |
 | --- | --- |
 | python-pulumi | G3.1, G4.x, G5.x, G6.x |
-| security-iam | G1.x, AD-A7 |
+| security-iam | G1.x, AD-A1, AD-A7 |
 | drift-management | G3.5, G6.3 |
-| delivery-and-rollback | G3.4, AD-A12, G5.7-G5.8 |
+| delivery-and-rollback | G3.4, AD-A12 |
 | observability | G5.2 |
 | cost-optimization | NFR-A07, AD-A6 |
 | infrastructure-quality | G3.2, G3.3 |
 | evidence-and-coverage | G5.6, G6.3 |
-| environment-lifecycle | G3.4 `initialize-stack`, OQ-5, AD-A15 feature flags |
-| state-migration | not applicable (new backend; OQ-5 decides any legacy state) |
-| backup-recovery | PD-6 rebuild; G5.7-G5.8 under OQ-8 (a) |
+| environment-lifecycle | G3.4 `initialize-stack`, D-A6, AD-A15 feature flags |
+| state-migration | not applicable (new backend; D-A6 retires any legacy state) |
+| backup-recovery | PD-6 rebuild |
 | incident-response | runbooks (NFR-A10) |
 | terraform-terraspace | not applicable |
 
-## Pre-commit audit (fresh context, `claude-router:audit`)
+## Revision 2 pre-commit audit (fresh context, `claude-router:audit`)
+
+**Audit of the uncommitted revision 2: REFUTED, narrowly** (2 major, 2 minor, 4 nits). It confirmed the D-A1…D-A8 records, the D-A# namespace, the removal and renumbering of rows, the absence of forward dependencies, the BI line and statement citations, the 55/24/21 counts, the 64/68 totals and the PRD counts. All eight findings were folded in:
+
+| # | Finding (short) | Resolution |
+| --- | --- | --- |
+| 1 | `verify_enrollment` cannot pass after CREATE (the executors are active) | AD-A1 mixed-phase verifier; G1.1, G1.2, FR-A02 |
+| 2 | OQ-9 (b) understated: governance seed ceilings | OQ-9 (b) restructured (ceilings, plus operator bindings found while fixing); AD-A1 validator; G1.3; K-17; readiness |
+| 3 | A stack policy cannot gate an Add; activation needs `Update:Modify` | AD-A1 steps 3 and 6; G1.2 |
+| 4 | Statement ids depend on the baseline | OQ-9 (b) ids per baseline; AD-A1 PROD ids |
+| 5-8 | brief §-reference; "two parts" wording; G1.2 Needs OQ-10; Apply guard variant for OQ-10 (b)/(c) | fixed |
+
+**Recheck (same auditor): REFUTED, narrowly.** Findings 1 and 3-8 FIXED; finding 2 PARTLY (the five operator executor guards that close the governance policy names, TEST `0c5eed92…`, `c18540fb…`, `408cdbf9…`, PROD `de33acbe…`, `0142330f…`, `7a337042…`, were missing). New: N1 (minor, the mixed-phase verifier assumed active PROD executors), N2 (nit, G1.1 validator wording lacked the OQ-9 (b) exception), N3 (nit, this table's attribution). All folded in: OQ-9 (b), AD-A1 validator and verifier, G1.1, G1.2, K-17, this file. No third round ran.
+
+## Revision 1 audit history
+
+The tables below record revision 1's audit. Findings #2, N1, N3 and N6
+concerned the OQ-8 (a) path, which D-A2 removed. Finding #8 and K-15
+concerned the registration shape, which D-A1 replaced (AD-A1, V-A10).
+
+### Revision 1 pre-commit audit (fresh context, `claude-router:audit`)
 
 **Audit of the uncommitted draft: REFUTED** (10 major, 10 minor, 2 nits).
 It confirmed the BI seed lines, the `pulumi_aws` 7.23.0 citations, the PR

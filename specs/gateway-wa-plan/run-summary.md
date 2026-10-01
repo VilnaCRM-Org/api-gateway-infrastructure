@@ -11,7 +11,7 @@ This file is the execution ledger. It is not a planning input.
 | Worktree | wt-agi-plan |
 | Branch | feat/gateway-wa-plan |
 | Source baseline | f056c8b32c64e502101ec573191d8f229881bc7a (origin/main) |
-| Bundle revision | 1 |
+| Bundle revision | 2 (user decisions D-A1…D-A8 of 2026-10-01; revision 1 is commit `3d511f1`) |
 | Specs directory | `specs/gateway-wa-plan/` |
 | Target | pulumi (Python Pulumi), stacks test and prod |
 | Environment | none selected; planning is offline |
@@ -32,6 +32,8 @@ This file is the execution ledger. It is not a planning input.
 - No repository test, lint or preview ran; this was analysis only.
 - Nothing was pushed, commented, closed or merged. No AGI source, BI or USI
   file was changed.
+- Revision 2 edited only `specs/gateway-wa-plan/`. The BI worktrees were
+  read only.
 
 ## Inputs
 
@@ -68,6 +70,30 @@ This file is the execution ledger. It is not a planning input.
   `G-GitHubGovernanceApply` statements; `prod.json` principals (Python).
   `wt-boot-pr280` and `wt-boot-219`: commit identity only (their facts
   enter through the USI bundle's citations).
+- **Revision 2, BI seed route (D-A1), read only:**
+  - `wt-boot-urllib3` (origin/main proxy, `862b4bf`):
+    - `pulumi/seed/README.md` (whole);
+    - `pulumi/seed/policy_registry.py` (whole);
+    - `scripts/operator_seed_installation.py` (lines 1-30, 104-130, and
+      the function list);
+    - `pulumi/infra/governance.py` (lines 414-517, 540-700);
+    - `pulumi/infra/ci_config.py` (lines 202-330);
+    - `pulumi/infra/ci_bootstrap.py` (lines 347-390);
+    - `docs/ci-config-trust-contract.md` (lines 1-30);
+    - read-only Python over both seed catalogs: principals, policy kinds,
+      operator bindings, and the statements of the USI guards and of
+      `G-GitHubGovernanceApply`.
+  - `wt-boot-pr280` (#284, `e85534c`):
+    `specs/test-poc-prerequisite-capability/amendment-installation.md`
+    (whole), `requirements.md` (lines 1-80), and `post-seed-activation.md`
+    (lines 105-125 and a grep).
+  - `wt-boot-219` (#285, `54e9e2f`):
+    `specs/219-test-workload-capability/installability-stop.md` (whole) and
+    a grep of `runtime-enrollment.md`.
+  - Two read-only `claude-router:recon` agents summarized #284 and #285.
+    Every claim used was re-read at the cited lines, and one claim was
+    corrected: the #285 recon recommended an independent stack, which D-A1
+    rejects as the route.
 - **SDK:** `pulumi_aws` 7.23.0 in `wt-boot-219/.venv` (grep of
   `apigateway/integration.py`, `domain_name.py`, `rest_api.py`).
 - **AWS documentation** (aws-knowledge MCP, 2026-10-01): the pages listed
@@ -78,19 +104,19 @@ This file is the execution ledger. It is not a planning input.
   the governance runbook needs only a catalog entry; GR-12 shows the seed
   guards block it).
 
-## Artifacts (sha256, revision 1)
+## Artifacts (sha256, revision 2)
 
 `run-summary.md` is not hashed here, because it contains the hashes. Check
 with `sha256sum -c` over the block below, from `specs/gateway-wa-plan/`.
 
 ```
-38152b04159d4bc52fa3250382912c47b51fac63c5cbeae4efd9badeee4291b0  research.md
-8eccb026095e0ad578d47caee1f5e340b20dfcc7fd517f5cbb134d7af17dae90  brief.md
-9f0be40d922a4be41a77073033aa2a9a86a1941af1c00aa286921df11e7d1a45  prd.md
-fb9f53df4e8c5d599ce8380adf6ea664dba4f4e83199406cea45e1be5b4dc396  architecture.md
-e9f498d943f69faa8fafd5d0d3b7090fcc729ae3c1ecf477057d51b61189ae59  epics-stories.md
-f86d6468f109ca6a030b327dcaeeed46684ef89dc4d00746d989c0408626a88e  decisions.md
-f3eb93816b5f4f402169662b9cf3eaa15c101abb7c36c0ce16de305ece31d171  readiness.md
+14846a596346622c53e40a2372ad256bd909f283f197b19b205df5d9eef9403e  research.md
+8810238e1348dc8ab0a8cb3e4f76bc190a828202708f5d35b15f87a2dfd2f939  brief.md
+039f7a292d973c5a58b4aa1d7d4a49d600e09472e8b73a70a7e9b276df445b96  prd.md
+5f56fc5e68292e541018b742a37b9c9608e9d7314081a3676c53dbfbc32be189  architecture.md
+fe22fd3180a7f5840ecbd10b0ab4ec5bca48c1d47f33ccc2e170d5591e3ad58f  epics-stories.md
+ad392338c3377c28a7de2591296e0aebc73fd698b55af6e980bb2e9a3d044d7f  decisions.md
+cbec463c33e10e16d43b85805ef3f20825c66faa190335fc697a346c44778b57  readiness.md
 ```
 
 ## Gates
@@ -98,16 +124,31 @@ f3eb93816b5f4f402169662b9cf3eaa15c101abb7c36c0ce16de305ece31d171  readiness.md
 | Gate | Result |
 | --- | --- |
 | Self-check (readiness.md) | complete; not a PASS |
-| Pre-commit fresh-context audit (`claude-router:audit`) | REFUTED: 10 major, 10 minor, 2 nits; all 22 folded in (readiness.md, "Pre-commit audit") |
-| Recheck of the audit | REFUTED narrowly: 21 of 22 fixed, #2 partly; new N1 (major, OQ-8 (a) only), N2-N4 (minor), N5-N6 (nits); all folded in; no third round |
+| Revision 1 pre-commit audit and recheck | REFUTED, then REFUTED narrowly; all findings folded into `3d511f1` (readiness.md, "Revision 1 audit history") |
+| Revision 2 pre-commit audit (`claude-router:audit`) | REFUTED narrowly: 2 major, 2 minor, 4 nits; all folded in |
+| Revision 2 recheck | REFUTED narrowly: 7 of 8 fixed, #2 partly; new N1 (minor), N2-N3 (nits); all folded in; no third round |
 | Independent readiness round | not run yet |
 
 ## Report summary
 
-- **Epics:** E-G0 dispositions (G0.1, G0.2); E-G1 BI enrolment (G1.2, G1.1, G1.3, G1.4a, G1.5, G1.6, G1.4b, G1.7, G1.8, and G1.9 only under OQ-8 (a));
-  E-G2 repository hygiene and controls (G2.1, G2.2); E-G3 pipeline
-  (G3.1-G3.5); E-G4 certificates (G4.1 = PR #34 amended, G4.2); E-G5 TEST
-  front door (G5.1-G5.6, and G5.7, G5.8 only under OQ-8 (a)); E-G6 PROD front door (G6.1-G6.3).
-- **Ordered list:** 36 rows (0-35; rows 26-28 only under OQ-8 (a)), no forward dependency.
+- **Decisions recorded:** D-A1…D-A8 (2026-10-01), gateway-local namespace.
+  They answer OQ-1…OQ-8.
+- **Epics:**
+  - E-G0 dispositions (G0.1, G0.2);
+  - E-G1 BI enrolment by the seed registration route (G1.1 packet, G1.2
+    install, activation and pin, G1.3, G1.4a, G1.5, G1.6, G1.4b, G1.7,
+    G1.8);
+  - E-G2 repository hygiene and controls (G2.1, G2.2);
+  - E-G3 pipeline (G3.1-G3.5);
+  - E-G4 certificates (G4.1 = PR #34 amended, G4.2 for
+    `user.vilnacrm.com`);
+  - E-G5 TEST front door (G5.1-G5.6);
+  - E-G6 PROD front door (G6.1-G6.3).
+- **Ordered list:** 33 rows (0-32), no forward dependency. Revision 1's
+  OQ-8 (a)-only rows 26-28 are removed.
 - **External preconditions:** XP-A1…XP-A14 (gateway-local namespace).
-- **Open user questions:** OQ-1…OQ-8, each with a recommendation.
+  XP-A1 is now the human seed operator; XP-A11 is resolved to "the zone
+  exists, or is created, in the PROD account".
+- **Open user questions:** OQ-9 (the writer of the gateway's grants and
+  non-role BI resources) and OQ-10 (ConfigRead roles). Cross-plan request
+  to USI: CR-A1.
