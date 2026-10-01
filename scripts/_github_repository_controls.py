@@ -404,11 +404,16 @@ def variable_blockers(
     return blockers
 
 
-def secret_blockers(name: str, names: Sequence[str] | None) -> list[str]:
-    """D-A10 and NFR-A01: no environment holds any secret."""
-    if names is None:
-        return [f"{name} secrets were not readable."]
-    return [f"{name} has the unexpected secret {secret}." for secret in names]
+def secret_blockers(name: str, count: int | None) -> list[str]:
+    """D-A10 and NFR-A01: no environment holds any secret.
+
+    Takes a count, never names, so the report cannot echo a secret name.
+    """
+    if type(count) is not int or count < 0:
+        return [f"{name} environment secrets were not readable."]
+    if count:
+        return [f"{name} has {count} environment secret(s); expected none."]
+    return []
 
 
 def readback_blockers(

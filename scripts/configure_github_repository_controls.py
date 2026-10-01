@@ -130,19 +130,20 @@ def _read_variables(repo: str, name: str) -> dict[str, str] | None:
     return {name: str(value) for name, value in variables.items()}
 
 
-def _read_secret_names(repo: str, name: str) -> list[str] | None:
-    """Read one environment's secret names (metadata only, never values)."""
+def _count_environment_entries(repo: str, name: str, kind: str) -> int | None:
+    """Count one environment listing's entries (D-A10: names are never kept).
+
+    Only the integer count leaves this function, so no listed name can reach
+    the report that `--check` prints.
+    """
     try:
         response = _run_gh_api(
-            [f"repos/{repo}/environments/{name}/secrets?per_page=100"]
+            [f"repos/{repo}/environments/{name}/{kind}?per_page=100"]
         )
     except RuntimeError:
         return None
-    rows = _listing_rows(response, "secrets")
-    names = [row.get("name") for row in rows or []]
-    if rows is None or not all(isinstance(n, str) for n in names):
-        return None
-    return [str(n) for n in names]
+    rows = _listing_rows(response, kind)
+    return None if rows is None else len(rows)
 
 
 def read_live(repo: str) -> dict[str, Any]:
@@ -151,7 +152,9 @@ def read_live(repo: str) -> dict[str, Any]:
         "ruleset": _main_ruleset(repo),
         "environments": {n: _read_environment(repo, n) for n in ENVIRONMENTS},
         "variables": {n: _read_variables(repo, n) for n in ENVIRONMENTS},
-        "secrets": {n: _read_secret_names(repo, n) for n in ENVIRONMENTS},
+        "secrets": {
+            n: _count_environment_entries(repo, n, "secrets") for n in ENVIRONMENTS
+        },
     }
 
 

@@ -288,12 +288,12 @@
     "target": "branch"
   },
   "secrets": {
-    "prod": [],
-    "prod-drift": [],
-    "prod-preview": [],
-    "test": [],
-    "test-drift": [],
-    "test-preview": []
+    "prod": 0,
+    "prod-drift": 0,
+    "prod-preview": 0,
+    "test": 0,
+    "test-drift": 0,
+    "test-preview": 0
   },
   "variables": {
     "prod": {

@@ -500,7 +500,7 @@ def test_readback_shape_and_unexpected_entries_fail() -> None:
     def change(data: dict) -> None:
         data["environments"]["governance"] = data["environments"]["test"]
         data["variables"]["other"] = {}
-        data["secrets"]["third"] = []
+        data["secrets"]["third"] = 0
 
     assert blockers_for(change) == [
         "Readback holds the unexpected environment governance.",
@@ -627,12 +627,16 @@ def test_bare_if_values_are_scanned_for_vars() -> None:
 # --- G22-F04: no environment secret ----------------------------------------
 
 
-def test_an_environment_secret_fails() -> None:
+def test_an_environment_secret_fails_with_a_count_only() -> None:
     def change(data: dict) -> None:
-        data["secrets"]["prod"] = ["AWS_SECRET_ACCESS_KEY"]
+        data["secrets"]["prod"] = 2
         data["secrets"]["test-drift"] = None
+        data["secrets"]["test"] = -1
+        data["secrets"]["test-preview"] = True
 
     assert blockers_for(change) == [
-        "test-drift secrets were not readable.",
-        "prod has the unexpected secret AWS_SECRET_ACCESS_KEY.",
+        "test-preview environment secrets were not readable.",
+        "test environment secrets were not readable.",
+        "test-drift environment secrets were not readable.",
+        "prod has 2 environment secret(s); expected none.",
     ]

@@ -21,6 +21,7 @@ from stack_fixtures import ROOT, committed_documents, key
 FIXTURES = ROOT / "tests" / "fixtures" / "repository-controls"
 REPO = "VilnaCRM-Org/api-gateway-infrastructure"
 REVIEWER_ID = 9444106
+LISTED_NAME = "AWS_SECRET_ACCESS_KEY"
 
 
 def fixture_text(name: str) -> str:
@@ -135,7 +136,7 @@ class FakeGitHub:
         if parts[1] == "deployment-branch-policies":
             return listing(env["deployment_branch_policies"])
         if parts[1].startswith("secrets"):
-            rows = [{"name": n} for n in self.data["secrets"][name]]
+            rows = [{"name": LISTED_NAME}] * self.data["secrets"][name]
             return {"total_count": len(rows), "secrets": rows}
         rows = [
             {"name": k, "value": v} for k, v in self.data["variables"][name].items()
@@ -433,13 +434,15 @@ def test_replace_needs_apply(capsys) -> None:
     assert "only valid with --apply" in capsys.readouterr().err
 
 
-def test_check_reads_secret_names_and_fails_on_one(monkeypatch, capsys) -> None:
+def test_check_counts_secrets_and_never_prints_a_name(monkeypatch, capsys) -> None:
     data = readback()
-    data["secrets"]["prod"] = ["AWS_SECRET_ACCESS_KEY"]
+    data["secrets"]["prod"] = 1
     install(monkeypatch, data)
     assert cli.main(["--repo", REPO, "--check"]) == 1
-    differences = json.loads(capsys.readouterr().out)["check"]["differences"]
-    assert differences == ["prod has the unexpected secret AWS_SECRET_ACCESS_KEY."]
+    captured = capsys.readouterr()
+    differences = json.loads(captured.out)["check"]["differences"]
+    assert differences == ["prod has 1 environment secret(s); expected none."]
+    assert LISTED_NAME not in captured.out + captured.err
 
 
 @pytest.mark.parametrize(
@@ -449,12 +452,17 @@ def test_check_reads_secret_names_and_fails_on_one(monkeypatch, capsys) -> None:
         {"total_count": 2, "secrets": [{"name": "A"}]},
         {"total_count": True, "secrets": []},
         {"total_count": 1, "secrets": ["x"]},
-        {"total_count": 1, "secrets": [{"name": 1}]},
     ],
 )
 def test_incomplete_secret_listings_are_unreadable(monkeypatch, response) -> None:
     monkeypatch.setattr(cli, "_run_gh_api", lambda args, **_: response)
-    assert cli._read_secret_names(REPO, "test") is None
+    assert cli._count_environment_entries(REPO, "test", "secrets") is None
+
+
+def test_the_count_is_an_int_and_keeps_no_name(monkeypatch) -> None:
+    page = {"total_count": 2, "secrets": [{"name": LISTED_NAME}, {"name": "B"}]}
+    monkeypatch.setattr(cli, "_run_gh_api", lambda args, **_: page)
+    assert cli._count_environment_entries(REPO, "test", "secrets") == 2
 
 
 def test_secret_listing_failure_is_unreadable(monkeypatch) -> None:
@@ -462,7 +470,7 @@ def test_secret_listing_failure_is_unreadable(monkeypatch) -> None:
         raise RuntimeError("no")
 
     monkeypatch.setattr(cli, "_run_gh_api", failing)
-    assert cli._read_secret_names(REPO, "test") is None
+    assert cli._count_environment_entries(REPO, "test", "secrets") is None
 
 
 def test_apply_refuses_unreadable_variables(monkeypatch) -> None:
