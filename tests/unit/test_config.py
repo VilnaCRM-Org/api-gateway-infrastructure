@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+
 from app import config
 from app.config import ConfigError
 from stack_fixtures import (

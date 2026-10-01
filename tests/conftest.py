@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+
 from stack_fixtures import PULUMI_DIR, committed_documents
 
 

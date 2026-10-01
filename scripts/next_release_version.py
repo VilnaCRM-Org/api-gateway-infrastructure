@@ -6,8 +6,9 @@ Stdlib only. Reads git history, never writes to the repository. Writes
 and prints the same lines to stdout.
 
 Rules:
-- the previous release is the highest tag reachable from HEAD that is exactly ``vMAJOR.MINOR.PATCH``
-  (tags such as ``v1.0.0-rc1`` or ``v1.2.3foo`` are ignored);
+- the previous release is the highest tag reachable from HEAD that is exactly
+  ``vMAJOR.MINOR.PATCH`` (tags such as ``v1.0.0-rc1`` or ``v1.2.3foo`` are
+  ignored);
 - ``type!:`` or a ``BREAKING CHANGE:`` body line is major, ``feat`` is minor,
   ``fix`` is patch, anything else is not releasable;
 - below 1.0.0 a breaking change bumps the minor version.
