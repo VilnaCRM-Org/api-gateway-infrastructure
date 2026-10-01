@@ -4,10 +4,10 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-check-implementation-readiness 
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 5 (independent readiness round 1 at 3913ccb: FAIL; findings F1-F13 resolved here)
-author: the planning agent that wrote revisions 1-5 (NOT an independent reviewer)
-independent_reviewer: readiness round 1 (FAIL, 3 major, 5 medium, lows) on revision 4; round 2 not run yet
-status: PENDING independent readiness round 2 on revision 5
+revision: 6 (independent readiness round 2 at 7ed5397: FAIL, no major; N1-N6 and L1-L12 resolved here; D-A12, D-A13, D-A14)
+author: the planning agent that wrote revisions 1-6 (NOT an independent reviewer)
+independent_reviewer: readiness round 1 (FAIL) on revision 4; round 2 (FAIL, no major) on revision 5; round 3 not run yet
+status: PENDING independent readiness round 3 on revision 6
 ---
 
 # Implementation readiness
@@ -30,9 +30,9 @@ independent readiness round. These items block implementation:
   `operator_seed_installation.py`) before any G1.1 code. This is a STOP.
 - **Row blocked by an external merge:** #284 merged and installed → row 9
   (and therefore every later BI row).
-- **Rows blocked by a conditional decision:** if V-A8 finds no scoped
-  `logs:PutResourcePolicy` and the BI owner declines it on Resource `*`,
-  row 16 stops for a user decision (not decided here).
+- **V-A8 in row 8:** it picks D-A12 branch A (the seed operator writes
+  the WAF-log resource policy once, in its own slot) or branch B (a scoped
+  grant) before any form is chosen. No user decision is pending.
 - **Rows blocked by external preconditions:**
   - XP-A1 → row 9, any later exact-ARN admission, and the API Gateway
     service-linked role in row 16 if XP-A5 finds it missing;
@@ -69,7 +69,7 @@ independent readiness round. These items block implementation:
     here, not decided.
   - rows 28-32 after USI row 52.
 
-## Checks performed (self-check, revision 5)
+## Checks performed (self-check, revision 6)
 
 | Check | Result |
 | --- | --- |
@@ -83,10 +83,10 @@ independent readiness round. These items block implementation:
 | D-A1 honoured: the gateway roles enter through a reviewed seed catalog amendment installed by the human seed operator; the governance-stack route is not used for role creation; the independent CloudFormation owner is not the chosen route | yes (AD-A1, FR-A01, FR-A02, G1.1, G1.2). The departures from USI are listed in AD-A1: role creation by the seed (D-A1), the governance admission (D-A9), no ConfigRead (D-A10) and the stricter trust (PD-14) |
 | D-A9 honoured (re-scoped by D-A11): governance writes the gateway's grants, backend, CMK and account settings; the G1.2 change set admits it by exact ARNs (plus the four AD-A1 allowed non-exact forms), now limited to the shared Preview/Drift ceilings (in-place merge), the operator bindings and the five operator guards; USI's `G-GitHubGovernanceApply` and Apply ceiling unchanged; external-identity mode; options (a) and (c) only as rejected alternatives | yes (decisions §1 and §3; AD-A1 "Governance admission"; FR-A02…FR-A06; G1.1…G1.8; XP-A1, XP-A4) |
 | D-A11 honoured: dedicated `GitHubGovernanceApply-api-gateway-infrastructure-{env}` with its own exact-ARN ceiling, guard and identity; trust mirrors `governance_trust_policy` with the environment `{env}-governance-api-gateway-infrastructure`; per-target governance job and stack; USI's ceiling and guard untouched; options (b) and (c) rejected | yes (decisions §1, §3; AD-A1; FR-A02; G1.1-G1.3) |
-| V-A12 (size) | resolved, re-measured in revision 5 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`, real replica names, `SeedKmsKeyArn` bound): dedicated Apply ceiling 5737 and identity 5737 (TEST, PROD), its guard 5198; shared Preview/Drift ceilings 3789/3799 → 5419/5429 (TEST/PROD; 3889 → 5519 at `ff2eaf29…`); USI's Apply ceiling unchanged at 5752/5762. All ≤ 6144; G1.1 re-renders them as tests |
+| V-A12 (size) | resolved; re-measured in revision 6 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`: real replica names, exact stack paths and governance key ARN, `SeedKmsKeyArn` bound). Dedicated Apply ceiling and identity 5905 under D-A12 branch A, 6065 under branch B (TEST, PROD); dedicated guard 5565; shared Preview/Drift ceilings 3789/3799 → 5419/5429 (TEST/PROD; 3889 → 5519 at `ff2eaf29…`); USI's Apply ceiling unchanged at 5752/5762. All ≤ 6144; branch B has 79 characters of headroom; G1.1 re-renders with the final names |
 | V-A13 (shared-ceiling budget across both plans) | open check: 625 characters remain on TEST after #284 + gateway for USI's later additions (S5.2 before the slot; XP-11 and S5.24a/b after it); G1.1 renders against the row-34 result catalog; CR-A2 carries the budget; over 6144 → STOP for both owners |
 | D-A10 honoured: no ConfigRead roles; c = 0; the Apply guard's secret-read statement has no CI-secret variant; a later reader needs a reviewed amendment | yes (AD-A1; FR-A01; G1.1; G3.4; decisions §3) |
-| Counts | per environment 30 principals (24 + 6), 21 existing roles, 9 seed-created principals (3 + 6), **67** policies (55 + 4 boundaries/ceilings + 6 guards + 2 identities: logging role and dedicated governance role). The coordinator's estimate of 66 omitted the dedicated role's seed-owned identity (AD-A1 derivation) |
+| Counts (re-verified in revision 6; D-A12 branch A's resource policy is not an IAM policy and adds nothing) | per environment 30 principals (24 + 6), 21 existing roles, 9 seed-created principals (3 + 6), **67** policies (55 + 4 boundaries/ceilings + 6 guards + 2 identities: logging role and dedicated governance role). The coordinator's estimate of 66 omitted the dedicated role's seed-owned identity (AD-A1 derivation) |
 | No story narrows an existing seed guard statement on Resource `*` | yes. **Recorded exception (D-A9, re-scoped by D-A11):** the shared governance Preview/Drift ceilings and the five operator guards (TEST `0c5eed92…`, `c18540fb…`, `408cdbf9…`; PROD `de33acbe…`, `0142330f…`, `7a337042…`) gain exact gateway entries. Two of those guards (`c18540fb…`, `0142330f…`) are Resource-`*` denies with an `ArnNotEquals` condition and are named in the exception. USI's `G-GitHubGovernanceApply` (`8c068aaa…`, `5366ec11…`, `dc27f076…`) and `ceiling/GitHubGovernanceApply` do not change (brief, Constraints) |
 | No CI role gets `ssm:*`, `iam:*`, `iam:PassRole`, `iam:CreateServiceLinkedRole` | yes (AD-A7 deny set; AD-A1 guards; G1.4a and G1.4b matrices) |
 | D-15 honoured: no SSM write or read anywhere | yes (AD-A2 drops PR #34's parameter; the policy pack refuses `aws:ssm/*`) |
@@ -99,8 +99,10 @@ independent readiness round. These items block implementation:
 
 ## User decisions
 
-- **Gateway decisions, dated 2026-10-01:** D-A1…D-A11 (`decisions.md` §1).
-  They answer OQ-1…OQ-11. The namespace is gateway-local, `D-A#` (PD-1).
+- **Gateway decisions, dated 2026-10-01:** D-A1…D-A14 (`decisions.md` §1).
+  D-A1…D-A11 answer OQ-1…OQ-11. D-A12 (`logs:PutResourcePolicy`) and
+  D-A13 (the backend pattern) answer readiness round 2. D-A14 records the
+  user's acceptance of the four non-exact forms. The namespace is gateway-local, `D-A#` (PD-1).
 - **Reused, dated 2026-09-30:** D-3, D-6, D-15 and the D-4 consequence
   (`decisions.md` §2).
 - No other user decision was invented. Every choice the plan needed and
@@ -113,8 +115,12 @@ governance), D-A10 (option (a), none) and D-A11 (option (a), dedicated
 governance role); their rejected alternatives are kept in
 `decisions.md` §3.
 
-**Cross-plan request for the USI owner:** CR-A1. USI S4.6 step 17 runs
-after step 20 and is held for gate A-T step 10 (two weekday drift runs).
+**Cross-plan requests for the USI owner:**
+- CR-A1: USI S4.6 step 17 runs after step 20 and is held for gate A-T
+  step 10 (two weekday drift runs), which also holds step 21 and gate-1
+  completion.
+- CR-A2: the gateway seed slot after USI row 34, with the rebase and the
+  shared-ceiling budget.
 
 The planning defaults PD-1…PD-14 are not decisions; the user may change any
 of them. A conditional decision appears only if V-A7 fails (an
@@ -133,7 +139,7 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | BI repository admin | G1.3: create the `{test,prod}-governance-api-gateway-infrastructure` environments (`@Kravalg` sole reviewer), per-action authorization |
 | `@Kravalg` | seed and stack reviews, BI and AGI PR approvals, every protected-environment apply, XP-A3 admin apply |
 | Gateway owner | G0.1 and the D-A6 emptiness check, the certificate hand-offs (XP-A8), PR #34 amendment coordination |
-| USI owner | CR-A1; XP-A7 descriptors (TEST after S4.6 step 20); pinning the gateway ARNs (USI XP-10, XP-15); XP-A14 campaign coordination |
+| USI owner | CR-A1, CR-A2 (slot, rebase, shared-ceiling budget); XP-A7 descriptors (TEST after S4.6 step 20); pinning the gateway ARNs (USI XP-10, XP-15); XP-A14 campaign coordination |
 | Owner of the `vilnacrm.com` PROD zone | XP-A11: the zone exists or is created in account `933245420672`; the zone id and the record permission |
 | User | XP-A10 endpoints, the D-A7 PROD values in the G6.2 PR, per-action authorizations |
 
@@ -155,6 +161,81 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | incident-response | runbooks (NFR-A10) |
 | terraform-terraspace | not applicable |
 | bmad-autonomous-planning | the planning chain itself (revisions 1-5) |
+
+## Revision 6 pre-commit audit (fresh context, `claude-router:audit`)
+
+**Audit of the uncommitted revision 6: REFUTED, narrowly** (2 P2, 3 P3, 5 P4). It confirmed:
+- D-A12, D-A13 and D-A14 are recorded faithfully;
+- every size reproduces from both BI worktrees;
+- `PulumiStateBuckets(manage_replication_role=False)` (`pulumi_state.py` 308, 581-586) reads the seed-created role;
+- the USI provider pattern, the PROD id mapping, the counts and the ordered list;
+- no stale current text;
+- only `specs/` changed.
+
+Resolutions:
+
+| # | Finding (short) | Resolution |
+| --- | --- | --- |
+| 1 | Exact stack paths missed `{stack}.pulumi-tags` | `stacks/governance/{stack}.*`; re-rendered: 5905 (A) / 6065 (B), guard 5565 |
+| 2 | Stack init could not run under the dedicated role (OIDC-only trust, no init path, environment created later) | The init runs after G1.3 step 3, by the XP-A1 human operator under a committed session policy (see recheck) |
+| 3 | No tests for the L4 deny, D-A12 or the state paths | G1.1 simulator rows (attach of fixed policies to other roles denied; `logs:PutResourcePolicy` on `*` and on other log groups denied; USI checkpoint denied; gateway stack objects allowed) |
+| 4 | Branch-A seed-operator slot not in the cross-plan queue | XP-A4 and CR-A2: after G1.2 and before row 16; no catalog change, no rebase |
+| 5 | N2 test missing from G3.1 | Added to G3.1 N |
+| 6 | Nits | XP-A14 names CR-A2; observation-script wording; row 8 Needs; NFR-A02 cites D-A14; step 8a waits 5 minutes after step 7 and fails on any 429/403 |
+
+**Recheck (same auditor): REFUTED, narrowly.** Findings 1 and 3-6 FIXED; 2 PARTLY. New:
+- **N1 (P3):** the init scope lacked a prefix-limited `s3:ListBucket`, so a missing stack would answer 403, and it named no principal or enforcement.
+- **N2 (P4):** the init scope wording differed between files.
+
+Both are folded in. The operator's own non-root role is assumed with a committed session policy, `pulumi/governance/stack-init-session-policy-{env}.json`, with:
+- `GetBucketLocation`;
+- `ListBucket` with an `s3:prefix` limit;
+- object read and write on `stacks/governance/{stack}.*`;
+- read of `meta.yaml`;
+- the governance key by exact ARN.
+
+A simulator run is part of acceptance, and the wording is unified in AD-A1, G1.3 and prd §2. No third round ran.
+
+## Readiness round 1 (on `3913ccb`, FAIL): resolution table
+
+| # | Finding (short) | Where resolved (revision 5, kept or refined in 6) |
+| --- | --- | --- |
+| F1 | Gateway seed operations missing from USI's closed seed queue | decisions CR-A2; prd XP-A4 (#284 precondition); G1.2 Needs; AD-A1 source packet (no `ef419680…` baseline); AD-A12 order table |
+| F2 | Dedicated role could rewrite trust and attach foreign policies | AD-A1 ceiling without role-write actions; guard denies (role, trust and tag updates; attach outside the four ARNs; inline on Apply and logging; revision 6 adds the L4 attach deny); G1.1 and G1.2 simulator cases |
+| F3 | Structural Preview cannot work with the flags on | AD-A15 offline `ci` stack (revision 6 adds the N2 provider); G3.1, G3.3, G4.1, G5.1; FR-A09, FR-A11 |
+| F4 | Nobody sets the AGI environment variables | G2.2 and FR-A07 variables, `--check`, one-directional name-match test (reverse direction in G3.5); row 12 |
+| F5 | Catalog change affects other stacks | G1.3 target filter; BI runner apply order; platform-stack apply (prd §2) |
+| F6 | Non-exact entries | D-A14 (user-accepted forms); separate KMS read; no `DeleteResourcePolicy`; revision 6 removes `logs:PutResourcePolicy` on `*` (D-A12) |
+| F7 | BI main enforces the opposite of the seed extension | G1.1 Files; V-A10 reframed; research GR-19, K-16 |
+| F8 | NFR-A05 and NFR-A06 untested | gate A-T steps 8a and 8b (revision 6 fixes the rate and defines the dry run) |
+| F9 | Size evidence incomplete | `evidence/render_governance_sizes.py` (real replica names, guard and identity rendered; re-measured in revision 6) |
+| F10 | `sns:GetSubscriptionAttributes`; API Gateway prefixes; logging-role trust | AD-A7; NFR-A02; V-A9 |
+| F11 | CR-A1 scope; G4.2 wait; G1.7 slot Needs; XP-A10; split option | CR-A1; G4.2 Needs; G1.7 Needs; XP-A10 rows 21 and 31; readiness note |
+| F12 | Nits | P/N/E exceptions; skill row; FR-A06 `CreateGrant`; citations; fixture substitution; `governance/*` residual; PROD-baseline STOP |
+| F13 | Profile and `attempts.json` absent | XP-A13; run-summary |
+
+## Readiness round 2 (on `7ed5397`, FAIL: no major, 6 medium, 12 low): resolution table
+
+| # | Finding (short) | Where resolved (revision 6) |
+| --- | --- | --- |
+| N1 | `logs:PutResourcePolicy` on `*` on the dedicated role contradicts D-A5 | **D-A12** (user): removed from the dedicated ceiling and identity; branch A (seed operator writes once, own slot, owner, evidence) or B (scoped grant); V-A8 in G1.1 Needs (row 8); AD-A1, AD-A9, FR-A05, G1.5, XP-A1 |
+| N2 | `ci` stack has no credential-less provider | AD-A15: dummy static keys with the four `skip_*` flags (USI `pulumi/app/stack.py` 132-147), only in `ci`; `config.py` rejects them in `test`/`prod`; test |
+| N3 | Gate A-T step 8a cannot pass at 50/s | Step 8a at ≤ 5 req/s from one IP for ≥ 10 minutes, below PD-3 and PD-4, 2xx only; NFR-A06 reworded |
+| N4 | Shared Preview/Drift roles lack identity grants for the new admissions | AD-A1 "Identity grants matching the ceiling admissions"; G1.3 step 1 enumerates them; matching-grant test |
+| N5 | Backend pattern | **D-A13** (user): FR-A03 and G1.3 P/N/E rewritten to the `PulumiStateBuckets` pattern; `manage_replication_role=False` keeps PD-12 consistent with no shared-code change |
+| N6 | No init step or stack config for the gateway governance stack | Stack config files; live `stack init` with owner, identity and readback before step 4; `PULUMI_PREVIEW_STACKS`/`PULUMI_DRIFT_STACKS` and admission call (AD-A1, G1.3 step 2a) |
+| L1 | `94a9f77e…` not a listed form | Replaced by the governance secrets key's exact ARN, pinned in G1.1 from an authenticated `DescribeKey` |
+| L2 | Form 3 not exact | Exact stack paths, following the BI operator-bindings layout; redundant lock wildcard removed |
+| L3 | Four forms need user acknowledgement | **D-A14** (user acknowledgement), its own record |
+| L4 | Apply-role policies attachable to other roles | Guard deny of `AttachRolePolicy` on every gateway role except the CI Apply role |
+| L5 | PROD id mapping wrong | `ec801503…` role reads, `6227eeae…` policy reads, `3899b5e7…` bucket reads |
+| L6 | Stale "CR-A1 only" text | prd §6, epics inventory and row 0, readiness, run-summary now name CR-A2 too |
+| L7 | No resolution tables | These two tables |
+| L8 | Observation script origin | On origin/main; only `--active` comes with #284 (G1.1 Files) |
+| L9 | Step 8b lacks `ec2:DescribeNetworkInterfaces`; dry run undefined | Drift grant (AD-A7, G1.4b); dry run is a preview of TEST against an empty local backend |
+| L10 | Mixed-phase N contradicts P | Qualified "an executor that G1.2 step 1 observed active" |
+| L11 | External-identity mode must skip `CiConfiguration` | AD-A1 and G1.3 (`governance.py` 657, 765-778) |
+| L12 | CR-A2 TEST budget lists PROD-only S5.24a/b | TEST: 625 for S5.2 TEST and XP-11; PROD: 715 for S5.2 PROD and S5.24a/b |
 
 ## Revision 5 pre-commit audit (fresh context, `claude-router:audit`)
 

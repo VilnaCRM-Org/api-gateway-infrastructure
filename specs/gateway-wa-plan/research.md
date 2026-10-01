@@ -7,7 +7,7 @@ branch: feat/gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a (origin/main)
 date: 2026-10-01
 status: planning-only
-revision: 5 (2026-10-01: readiness round 1 corrections: GR-13 line numbers, GR-19 framing)
+revision: 6 (2026-10-01: readiness round 1 and 2 corrections)
 ---
 
 # Technical research: the API gateway Well-Architected track
@@ -468,4 +468,4 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
 | K-15 | The seed registry hard-codes its principal counts and treats `existing: false` as an operator executor (BI `pulumi/seed/policy_registry.py` lines 355, 431-446, 505-514, 570-590). | AD-A1: the seed creates the gateway principals as a new seed-created service kind and registers them, with inventory, installer and verifier changes in G1.1 (GR-18, GR-19; V-A10). |
 | K-16 | For new runtime roles, the BI owner chose a separate CloudFormation stack, not an extension of the seed inventory (GR-19). The BI owner may decline the inventory extension that D-A1 needs. | V-A10: the BI owner reverses origin/main's documented rule and confirms the extension shape before any G1.1 code (a STOP). If it is declined, the story STOPs and goes back to the user. There is no silent fallback to an independent stack. |
 | K-17 | Governance cannot write any gateway IAM resource or create the gateway's S3, KMS and account-level resources. Its guard (`8c068aaa…`, `5366ec11…`) and its USI-scoped seed ceilings (`ceiling/GitHubGovernanceApply` `7a36d2ff…`, `a392c269…`, `00257170…`, `abfe3f39…`; `C-GitHubGovernancePreview`/`-Drift`) both block it, and the operator executor guards (`0c5eed92…`, `c18540fb…`, `408cdbf9…` in TEST) close the governance policy names to the USI ones. So the gateway's grants and non-role BI resources need an owner that the USI pattern does not give (GR-12, GR-18). | D-A9, re-scoped by D-A11: the gateway's governance apply runs under a dedicated seed-created role; only the shared Preview/Drift ceilings, the operator bindings and the five operator guards are amended (AD-A1). |
-| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | Resolved by D-A11: a dedicated governance Apply role with its own ceiling (measured 5737 in revision 5); USI's ceiling untouched; V-A12. |
+| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | Resolved by D-A11: a dedicated governance Apply role with its own ceiling (measured 5905, or 6065 under D-A12 branch B, in revision 6); USI's ceiling untouched; V-A12. |

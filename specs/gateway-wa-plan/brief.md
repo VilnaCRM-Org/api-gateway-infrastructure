@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/1-analysis/bmad-create-product-brief (Create mode,
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 5 (2026-10-01: user decisions D-A1…D-A11; readiness round 1 corrections)
+revision: 6 (2026-10-01: user decisions D-A1…D-A14)
 inputDocuments: [research.md, decisions.md, USI specs/workload-wa-hardening (commit 9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -116,7 +116,7 @@ delivered as its own governed track instead of the single USI story S5.16.
 
 ## Constraints
 
-- D-3, D-6 and D-15 (decisions.md §2); D-A1…D-A11 (decisions.md §1).
+- D-3, D-6 and D-15 (decisions.md §2); D-A1…D-A14 (decisions.md §1).
 - OIDC only; no long-lived keys or personal access tokens in CI.
 - Saved-plan apply; TEST before PROD; `@Kravalg` as the sole approver of
   protected environments.

@@ -11,7 +11,7 @@ This file is the execution ledger. It is not a planning input.
 | Worktree | wt-agi-plan |
 | Branch | feat/gateway-wa-plan |
 | Source baseline | f056c8b32c64e502101ec573191d8f229881bc7a (origin/main) |
-| Bundle revision | 5 (readiness round 1 at `3913ccb`: FAIL; F1-F13 resolved; revisions 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`, 4 `3913ccb`) |
+| Bundle revision | 6 (readiness round 2 at `7ed5397`: FAIL, no major; N1-N6/L1-L12 resolved; D-A12, D-A13, D-A14; revisions 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`, 4 `3913ccb`, 5 `7ed5397`) |
 | Specs directory | `specs/gateway-wa-plan/` |
 | Target | pulumi (Python Pulumi), stacks test and prod |
 | Environment | none selected; planning is offline |
@@ -122,20 +122,20 @@ This file is the execution ledger. It is not a planning input.
   the governance runbook needs only a catalog entry; GR-12 shows the seed
   guards block it).
 
-## Artifacts (sha256, revision 5)
+## Artifacts (sha256, revision 6)
 
 `run-summary.md` is not hashed here, because it contains the hashes. Check
 with `sha256sum -c` over the block below, from `specs/gateway-wa-plan/`.
 
 ```
-046e8421d35ab03f49a6be8d80923347404e1482637d9866b139608e8374c0ad  research.md
-387039d33cd78c13a33a4b72e51e50362d9f0971f801cbbf0c5d6552188f3b22  brief.md
-09eb1cffc76ce52878b0821a434dd039419f3243d125613abc02887901544539  prd.md
-a9927a2057beb19e92c9f2023243bde0c69a56db6fc8080c50f3d0f5f68d5e5e  architecture.md
-1cdc6aed0bc6cfdc5dab8ca808bfeb98dd81631a6728fc4319adf9edfaa6eb64  epics-stories.md
-a67bfe73d858c7eb6b47308ae0dd2bd97acd1e21238fa0e228ad436e95b0ca8c  decisions.md
-5294fd53ed1bf8132b539b764c6dd8eef55c902edc638e28bc90a18d0e621428  readiness.md
-9c70e4768a4771214a165df308ccb501e8432397d3552d3cf9bcee7f7d5ed981  evidence/render_governance_sizes.py
+07c570101c707515a195c218e072398ded6720a3d36c68f3711608b388136d85  research.md
+fe17c6426c8e9cc1c719338bb86ede05da7bee28fd81ec215a68b148f105989c  brief.md
+1c7b3e13e241c647f707c9204d0c7cc875b2a944f13aac7d8987ea77302c0473  prd.md
+1e5f8cef714bacdd2e4fb41692d74cfe692fc04f84cae7b7e5c99017681a9113  architecture.md
+0cb8dbe658834f57c35d1474929d7ea2c4247171c2b6db8a74fc0d5b8b6ce3cc  epics-stories.md
+e860d0293ed9bce864ac8e62527a2c79003cd9df145acf6bb51f675d0431e164  decisions.md
+af6e14590300dd860a69dc641b998a79bbb5bab0c0cd7ff61a05579460084f27  readiness.md
+81d771267a0b10e15c843be2e4a801acab24a899dd67a3097811cc3b476f9f72  evidence/render_governance_sizes.py
 ```
 
 ## Gates
@@ -153,11 +153,14 @@ a67bfe73d858c7eb6b47308ae0dd2bd97acd1e21238fa0e228ad436e95b0ca8c  decisions.md
 | Independent readiness round 1 (on `3913ccb`, BI baseline `bea5252`) | FAIL: 3 major, 5 medium, lows, nits, 1 process; resolved in revision 5 |
 | Revision 5 pre-commit audit (`claude-router:audit`) | REFUTED narrowly: 3 P2, 2 P3, 4 nits; all folded in |
 | Revision 5 recheck | REFUTED narrowly: 2 of 6 fixed, 4 partly (apply mechanism per BI runner, row-8 cross-plan order, exact-ARN wording, ci provider in PRD); all folded in; no third round |
+| Independent readiness round 2 (on `7ed5397`) | FAIL: no major, 6 medium, 12 low; user decisions D-A12, D-A13 and acknowledgement D-A14; resolved in revision 6 |
+| Revision 6 pre-commit audit (`claude-router:audit`) | REFUTED narrowly: 2 P2, 3 P3, 5 P4; all folded in |
+| Revision 6 recheck | REFUTED narrowly: 5 of 6 fixed, #2 partly; new N1 (P3, init session policy), N2 (P4); folded in; no third round |
 | Independent readiness round | not run yet |
 
 ## Report summary
 
-- **Decisions recorded:** D-A1…D-A11 (2026-10-01), gateway-local namespace.
+- **Decisions recorded:** D-A1…D-A14 (2026-10-01), gateway-local namespace.
   They answer OQ-1…OQ-11. Revision 4 adds D-A11 (a dedicated, seed-created
   governance Apply role for the gateway; USI's governance Apply ceiling and
   guard untouched). Revision 3 adds D-A9 (governance owns the
@@ -179,9 +182,9 @@ a67bfe73d858c7eb6b47308ae0dd2bd97acd1e21238fa0e228ad436e95b0ca8c  decisions.md
 - **External preconditions:** XP-A1…XP-A14 (gateway-local namespace).
   XP-A1 is now the human seed operator; XP-A11 is resolved to "the zone
   exists, or is created, in the PROD account".
-- **Open user questions:** none. Cross-plan request to USI: CR-A1.
+- **Open user questions:** none. Cross-plan requests to USI: CR-A1 and CR-A2.
 - **Counts per environment:** 30 principals, 9 seed-created, 67 seed
   policies. Measured sizes (`evidence/render_governance_sizes.py`):
-  dedicated governance Apply ceiling 5737, its identity 5737, its guard
-  5198, shared Preview/Drift ceilings 5419/5429 (TEST/PROD), all ≤ 6144
-  (revision 5).
+  dedicated governance Apply ceiling and identity 5905 (D-A12 branch A) /
+  6065 (branch B), its guard 5565, shared Preview/Drift ceilings
+  5419/5429 (TEST/PROD), all ≤ 6144 (revision 6).

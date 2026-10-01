@@ -12,6 +12,9 @@ canonical JSON lengths against the 6144-character managed-policy limit. The
 replica bucket names are the deterministic names of BI
 `pulumi/infra/pulumi_state.py` `_replica_bucket_name` (lines 267-275).
 Names marked "planning" are fixed exactly in G1.1. No AWS call is made.
+Revision 6: no logs:PutResourcePolicy on "*" (D-A12; branch B renders the
+scoped form), exact stack paths, the governance secrets key by exact ARN,
+and a guard deny of managed attachments outside the CI Apply role.
 """
 
 from __future__ import annotations
@@ -155,18 +158,45 @@ def dedicated_apply_statements(env: str, catalog: dict) -> list[dict]:
         {"Action": "iam:PassRole", "Condition": {"StringEquals": {"iam:PassedToService": "s3.amazonaws.com"}}, "Effect": "Allow", "Resource": n["repl_role"]},
         {"Action": "iam:PassRole", "Condition": {"StringEquals": {"iam:PassedToService": "apigateway.amazonaws.com"}}, "Effect": "Allow", "Resource": n["log_role"]},
         {"Action": ["apigateway:GET", "apigateway:PATCH"], "Effect": "Allow", "Resource": "arn:aws:apigateway:eu-central-1::/account"},
-        # No DeleteResourcePolicy (readiness F6). Resource "*" pending V-A8.
-        {"Action": ["logs:DescribeResourcePolicies", "logs:PutResourcePolicy"], "Effect": "Allow", "Resource": "*"},
+        # D-A12: no logs:PutResourcePolicy on "*" for any CI or governance role.
+        # Branch A (default): only the read; the human seed operator writes the
+        # WAF-log resource policy. Branch B (V-A8 finds a scoped form) adds
+        # PUT_SCOPED below.
+        {"Action": "logs:DescribeResourcePolicies", "Effect": "Allow", "Resource": "*"},
         copy.deepcopy(usi["s3:GetBucketLocation"]),
         copy.deepcopy(usi["s3:ListBucket"]),
         {
             "Action": ["s3:DeleteObject", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"],
             "Effect": "Allow",
-            "Resource": [f"{base}/*/governance/{stack}*", f"{base}/locks/organization/governance/{stack}/*"],
+            # Exact stack paths, following the BI operator bindings layout
+            # (stacks/<project>/<stack>.{json,json.bak,pulumi-tags}, history|backups/<project>/<stack>/,
+            # locks/organization/<project>/<stack>/).
+            "Resource": [
+                f"{base}/stacks/governance/{stack}.*",  # .json, .json.bak, .pulumi-tags
+                f"{base}/history/governance/{stack}/*",
+                f"{base}/backups/governance/{stack}/*",
+                f"{base}/locks/organization/governance/{stack}/*",
+            ],
         },
         {"Action": "s3:GetObject", "Effect": "Allow", "Resource": f"{base}/meta.yaml"},
-        copy.deepcopy(usi["kms:Decrypt"]),
+        # Governance secrets key by exact ARN (G1.1 pins it from an
+        # authenticated DescribeKey of alias/pulumi-platform-bootstrap-{env});
+        # placeholder of the real length here.
+        {
+            "Action": ["kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey", "kms:ReEncryptFrom", "kms:ReEncryptTo"],
+            "Effect": "Allow",
+            "Resource": f"arn:aws:kms:eu-central-1:{acct}:key/00000000-0000-0000-0000-000000000000",
+        },
     ]
+
+
+def put_scoped(env: str) -> dict:
+    """Branch B only: the V-A8 scoped form, one exact log-group ARN."""
+    return {
+        "Action": "logs:PutResourcePolicy",
+        "Effect": "Allow",
+        "Resource": f"arn:aws:logs:eu-central-1:{ACCOUNTS[env]}:log-group:aws-waf-logs-{P}-{env}",
+    }
 
 
 def _bind_seed_key(value, key_arn: str):
@@ -202,6 +232,8 @@ def dedicated_guard(env: str, catalog: dict) -> dict:
         },
         # Trust, role and tag updates on the five gateway roles (455fe8d0 pattern).
         {"Action": sorted(ROLE_WRITES), "Effect": "Deny", "Resource": roles},
+        # Managed attachments only on the CI Apply role (round-2 L4).
+        {"Action": "iam:AttachRolePolicy", "Effect": "Deny", "Resource": [r for r in roles if r != n["ci_roles"][0]]},
         # Attach/detach only the four fixed Apply-role policies.
         {
             "Action": ["iam:AttachRolePolicy", "iam:DetachRolePolicy"],
@@ -256,6 +288,8 @@ def main() -> None:
         doc = {"Version": "2012-10-17", "Statement": statements}
         print(env, "replica", replica_bucket(f"pulumi-{P}-{env}-state"))
         print(env, "dedicated-apply-ceiling", len(canonical_json(doc)))
+        branch_b = {"Version": "2012-10-17", "Statement": statements + [put_scoped(env)]}
+        print(env, "dedicated-apply-ceiling-branch-B", len(canonical_json(branch_b)))
         print(env, "dedicated-apply-identity", len(canonical_json(copy.deepcopy(doc))))
         print(env, "dedicated-apply-guard", len(canonical_json(dedicated_guard(env, catalog))))
         for name in ("C-GitHubGovernancePreview", "C-GitHubGovernanceDrift"):
