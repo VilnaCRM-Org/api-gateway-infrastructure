@@ -91,8 +91,12 @@ test-deps-security: ## Dependency Audit: pip-audit of every package in the froze
 	$(RUN) bash -o pipefail -c 'uv export --frozen --all-groups --no-emit-project --format requirements-txt --output-file /tmp/requirements.txt >/dev/null \
 		&& uv run --frozen pip-audit --strict --disable-pip --require-hashes --requirement /tmp/requirements.txt'
 
+# scripts/gitleaks_gate.py runs `gitleaks git --log-opts=HEAD` only after git
+# resolves HEAD in the same container, and fails on an empty scan: gitleaks
+# alone exits 0 with "0 commits scanned" when it cannot read the repository
+# (for example a git worktree whose main .git is not mounted).
 test-secrets: ## Secrets Scan: gitleaks over every commit reachable from HEAD.
-	$(RUN) gitleaks git --no-banner --redact --verbose --log-opts=HEAD .
+	$(RUN) uv run --frozen python scripts/gitleaks_gate.py .
 
 test-actionlint: ## Actionlint: workflow lint with shellcheck on every run script.
 	$(RUN) actionlint -verbose

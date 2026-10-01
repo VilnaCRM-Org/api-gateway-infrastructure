@@ -227,8 +227,8 @@ def test_zizmor_is_offline_locally_and_online_in_ci() -> None:
 
 
 def test_secrets_scan_reads_history() -> None:
-    assert "gitleaks git" in recipe("test-secrets")
-    assert "--log-opts=HEAD" in recipe("test-secrets")
+    assert "scripts/gitleaks_gate.py ." in recipe("test-secrets")
+    assert "gitleaks git" not in recipe("test-secrets")  # only through the gate
     job = wc.load(battery_text("security-scans.yml"), [])["jobs"]["secrets_scan"]
     assert job["steps"][0]["with"] == {"fetch-depth": 0, "persist-credentials": False}
 

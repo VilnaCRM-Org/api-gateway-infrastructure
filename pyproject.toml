@@ -57,6 +57,7 @@ known-first-party = [
     "bandit_gate",
     "check_contracts",
     "codeql_sarif_gate",
+    "gitleaks_gate",
     "next_release_version",
     "policy",
     "pulumi_ci_guardrails",
