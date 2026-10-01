@@ -56,7 +56,8 @@ test-ruff       Ruff: lint and format check of every Python source and test.
 test-secrets    Secrets Scan: gitleaks over every commit reachable from HEAD.
 test-types      Types: ty static type check of the program, scripts and policy.
 test-yaml       Yamllint: every YAML file, warnings fail.
-test-zizmor     Zizmor: workflow security audit (offline audits).
+test-zizmor     Zizmor (local): workflow security audit, offline audits only.
+test-zizmor-online Zizmor (CI): offline and online audits; needs GH_TOKEN.
 up              Start the development container.
 ```
 The Python toolchain is [uv](https://docs.astral.sh/uv/) with the frozen, hash-pinned `uv.lock` at the repository root (Python 3.11, `pulumi-aws` 7.23.0). The Pulumi program lives in `pulumi/`; its stacks are `test`, `prod` and the offline `ci` stack (AD-A15), and `pulumi/app/config.py` refuses any stack config outside that closed shape.
@@ -78,7 +79,7 @@ Every pull request, forks included, runs the AD-A11 battery checks with `permiss
 | `Bandit` | `security-scans.yml` | `test-bandit` |
 | `Dependency Review` | `security-scans.yml` | GitHub only |
 | `Actionlint` | `security-scans.yml` | `test-actionlint` |
-| `Zizmor` | `security-scans.yml` | `test-zizmor` |
+| `Zizmor` | `security-scans.yml` | `test-zizmor-online` in CI, `test-zizmor` locally |
 | `Yamllint` | `security-scans.yml` | `test-yaml` |
 | `Hadolint` | `security-scans.yml` | `test-dockerfile` |
 | `CodeQL (python)`, `CodeQL (actions)` | `codeql.yml` | GitHub only |
@@ -86,7 +87,8 @@ Every pull request, forks included, runs the AD-A11 battery checks with `permiss
 - **Coverage:** `coverage run -m pytest` over all of `tests/`, then `coverage report` with `fail_under = 100` and branch coverage on `pulumi/` and `scripts/` (`pyproject.toml`). G3.3 adds `policy/`; a test fails until it is listed.
 - **Bandit:** `scripts/bandit_gate.py` also fails on bandit's `Test in comment` and `nosec encountered` warnings, on a `# nosec` that does not name rule ids, that is not on a one-line statement, or that suppresses nothing. No rule is skipped, except B101 (`assert`) in `tests/`.
 - **CodeQL:** PR jobs cannot hold `security-events: write`, so `analyze` runs with `upload: never` and `scripts/codeql_sarif_gate.py` fails the job on any result in the SARIF output.
-- **Zizmor:** `.github/zizmor.yml` requires a commit-SHA pin for every action (its default would let `actions/*` and `github/*` use a tag), so a tag pin fails `Zizmor` as well as the shape test (FR-A08). It runs offline. The online audits (`impostor-commit`, `ref-confusion`, `known-vulnerable-actions`, `stale-action-refs`) need a GitHub token, and PR jobs hold none. Instead, each SHA pin below was checked with `git ls-remote` against its upstream tag when it was written, and dependabot keeps them current.
+- **Zizmor:** `.github/zizmor.yml` requires a commit-SHA pin for every action (its default would let `actions/*` and `github/*` use a tag), so a tag pin fails `Zizmor` as well as the shape test (FR-A08). In CI the job runs `make test-zizmor-online`, which adds the online audits (`impostor-commit`, `ref-confusion`, `known-vulnerable-actions` and the others) to the offline ones. They use the job's read-only `GITHUB_TOKEN` (`contents: read`), passed as `GH_TOKEN` in that one step's `env` and nowhere else; a fork PR also gets a read-only token, so they run for forks too. The shape test allows `github.token` only there. Locally, `make test-zizmor` runs the offline audits only (no token, no network); `test-zizmor-online` refuses to run without `GH_TOKEN`, because zizmor would otherwise skip the online audits silently. Each SHA pin below was also checked with `git ls-remote` against its upstream tag when it was written.
+- **Zizmor personas:** the job uses zizmor's default persona. The stricter `auditor` persona reports no finding either: its two findings on `autorelease.yml` (`undocumented-permissions` on `contents: write`, `anonymous-definition` on the job) are fixed by a comment and the job name `Release`.
 - **Secrets Scan:** gitleaks over every commit reachable from `HEAD` (full-depth checkout).
 - **Tools:** the Python tools are hash-pinned in `uv.lock`; actionlint, shellcheck, gitleaks and hadolint are version- and SHA-256-pinned in the `Dockerfile`.
 

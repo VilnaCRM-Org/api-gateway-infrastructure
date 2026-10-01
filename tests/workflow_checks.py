@@ -407,6 +407,7 @@ BATTERY_RUN = re.compile(
 )
 BATTERY_FORBIDDEN_JOB_KEYS = {
     "container",
+    "env",
     "environment",
     "permissions",
     "secrets",
@@ -414,6 +415,36 @@ BATTERY_FORBIDDEN_JOB_KEYS = {
     "uses",
 }
 BATTERY_CHECKOUT_WITH_KEYS = {"persist-credentials", "fetch-depth"}
+# G3.2 F03: the one place the battery may use the job's read-only token
+# (contents: read; forks get a read-only token too): the env of the `Zizmor`
+# job's online step, for impostor-commit, ref-confusion and
+# known-vulnerable-actions.
+ZIZMOR_JOB = "Zizmor"
+ZIZMOR_ONLINE_RUN = "make test-zizmor-online"
+ZIZMOR_ONLINE_ENV = {"GH_TOKEN": GH_TOKEN}
+
+
+def _is_zizmor_online_step(job, step):
+    return (
+        job.get("name") == ZIZMOR_JOB
+        and step.get("run") == ZIZMOR_ONLINE_RUN
+        and step.get("env") == ZIZMOR_ONLINE_ENV
+        and set(step) <= {"name", "run", "env"}
+    )
+
+
+def _without_allowed_token(doc):
+    """A copy of `doc` without the env of the allowed Zizmor online step."""
+    jobs = {}
+    for name, job in _job_items(doc):
+        steps = [
+            {k: x for k, x in step.items() if k != "env"}
+            if _is_zizmor_online_step(job, step)
+            else step
+            for step in _steps(job)
+        ]
+        jobs[name] = dict(job, steps=steps)
+    return dict(doc, jobs=jobs)
 
 
 def _battery_top(doc, v):
@@ -432,8 +463,10 @@ def _battery_top(doc, v):
         v.append("battery top-level permissions must be exactly contents: read")
     if "env" in doc:
         v.append("battery workflows must not set top-level env")
-    if any("github.token" in s for s in iter_strings(doc)):
-        v.append("battery workflows must not reference github.token")
+    if any("github.token" in s for s in iter_strings(_without_allowed_token(doc))):
+        v.append(
+            "github.token is only allowed as the Zizmor online step's env GH_TOKEN"
+        )
 
 
 def _battery_checkout(where, step, v):
@@ -447,11 +480,11 @@ def _battery_checkout(where, step, v):
         v.append(f"{where}: checkout fetch-depth may only be 0")
 
 
-def _battery_step(where, step, v):
+def _battery_step(where, step, v, token_step=False):
     uses = str(step.get("uses", ""))
     if uses.startswith("actions/checkout@"):
         _battery_checkout(where, step, v)
-    if "env" in step:
+    if "env" in step and not token_step:
         v.append(f"{where}: battery steps must not set env")
     run = step.get("run")
     if run is None:
@@ -481,7 +514,8 @@ def check_battery(text):
         if not isinstance(job.get("name"), str):
             v.append(f"job {name}: needs a check name")
         for i, step in enumerate(_steps(job)):
-            _battery_step(f"job {name} step {i}", step, v)
+            token_step = _is_zizmor_online_step(job, step)
+            _battery_step(f"job {name} step {i}", step, v, token_step)
     return v
 
 

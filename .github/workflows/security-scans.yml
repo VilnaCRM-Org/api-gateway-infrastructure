@@ -109,8 +109,13 @@ jobs:
       - name: Build the development image
         run: make build
 
+      # The job's read-only token (contents: read; a fork PR gets a read-only
+      # token too), scoped to this step, enables zizmor's online audits:
+      # impostor-commit, ref-confusion, known-vulnerable-actions.
       - name: Zizmor
-        run: make test-zizmor
+        run: make test-zizmor-online
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   yamllint:
     name: Yamllint

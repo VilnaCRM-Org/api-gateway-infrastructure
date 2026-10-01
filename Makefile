@@ -10,6 +10,8 @@ export GID
 DOCKER_COMPOSE = docker compose
 SERVICE        = app
 RUN            = $(DOCKER_COMPOSE) run --rm $(SERVICE)
+# Passes the caller's GH_TOKEN by name; used only by test-zizmor-online.
+RUN_GH         = $(DOCKER_COMPOSE) run --rm -e GH_TOKEN $(SERVICE)
 
 # Misc
 .DEFAULT_GOAL  = help
@@ -17,7 +19,7 @@ RUN            = $(DOCKER_COMPOSE) run --rm $(SERVICE)
 .PHONY: help build start up down sh test test-lockfile clean test-battery \
         test-ruff test-types test-maintainability test-coverage test-bandit \
         test-deps-security test-secrets test-actionlint test-zizmor test-yaml \
-        test-dockerfile
+        test-dockerfile test-zizmor-online
 
 # G3.2 PR quality battery (AD-A11, FR-A10). Each target is one required check
 # and runs inside the development image, exactly as CI runs it. NFR-A09
@@ -90,12 +92,19 @@ test-secrets: ## Secrets Scan: gitleaks over every commit reachable from HEAD.
 test-actionlint: ## Actionlint: workflow lint with shellcheck on every run script.
 	$(RUN) actionlint -verbose
 
-# zizmor's online audits (impostor-commit, ref-confusion, known-vulnerable-
-# actions, stale-action-refs) need a GitHub token; PR jobs hold none, so the
-# battery runs the offline audits. Every SHA pin was checked against its tag
-# with `git ls-remote` when it was written (README "PR quality battery").
-test-zizmor: ## Zizmor: workflow security audit (offline audits).
+# Locally, zizmor runs its offline audits: no token and no network. CI runs
+# test-zizmor-online instead. Every PR job, a fork's included, gets a
+# read-only GITHUB_TOKEN (contents: read); the Zizmor job passes it as
+# GH_TOKEN to that one step, which adds the online audits (impostor-commit,
+# ref-confusion, known-vulnerable-actions and the others). Without a token,
+# zizmor silently skips them, so the online target refuses to run without
+# one.
+test-zizmor: ## Zizmor (local): workflow security audit, offline audits only.
 	$(RUN) uv run --frozen zizmor --offline --no-progress .
+
+test-zizmor-online: ## Zizmor (CI): offline and online audits; needs GH_TOKEN.
+	@test -n "$$GH_TOKEN" || { echo "test-zizmor-online: GH_TOKEN is not set; zizmor would skip its online audits" >&2; exit 1; }
+	$(RUN_GH) uv run --frozen zizmor --no-progress .
 
 test-yaml: ## Yamllint: every YAML file, warnings fail.
 	$(RUN) uv run --frozen yamllint --strict -c .yamllint.yml .
