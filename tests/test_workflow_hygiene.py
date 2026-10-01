@@ -10,7 +10,8 @@ import importlib.util
 import io
 import os
 import re
-import subprocess  # nosec B404 - test-only fixed argv, no shell
+import shutil
+import subprocess  # nosec B404
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workflow_checks as wc  # noqa: E402
 
+GIT = shutil.which("git")
 ROOT = Path(__file__).resolve().parents[1]
 WF_DIR = ROOT / ".github" / "workflows"
 WORKFLOWS = sorted(WF_DIR.glob("*.y*ml"))
@@ -330,8 +332,8 @@ def make_repo(tmp, steps):
     env = git_env()
 
     def git(*args):
-        subprocess.run(["git", *args], cwd=tmp,  # nosec B603 B607 check=True, env=env,
-                       capture_output=True)
+        cmd = [GIT, *args]
+        subprocess.run(cmd, cwd=tmp, check=True, env=env, capture_output=True)  # nosec B603
 
     git("init", "-q", "-b", "main")
     for kind, *rest in steps:
@@ -343,6 +345,25 @@ def make_repo(tmp, steps):
             git(*rest)
 
 
+class MakeRepoIsolationTest(unittest.TestCase):
+    def test_git_is_resolved(self):
+        self.assertTrue(GIT and os.path.isabs(GIT))
+
+    def test_make_repo_raises_on_failing_git_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(subprocess.CalledProcessError):
+                make_repo(tmp, [("commit", "a"), ("git", "checkout", "-q", "no-such-ref")])
+
+    def test_commits_use_the_isolated_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            make_repo(tmp, [("commit", "a")])
+            cmd = [GIT, "log", "--format=%ae|%ce"]
+            env = git_env()
+            res = subprocess.run(cmd, cwd=tmp, check=True, env=env, capture_output=True, text=True)  # nosec B603
+            out = res.stdout.strip()
+        self.assertEqual(out, "t@t.invalid|t@t.invalid")
+
+
 class NextReleaseVersionTest(unittest.TestCase):
     script = ROOT / "scripts" / "next_release_version.py"
 
@@ -351,8 +372,8 @@ class NextReleaseVersionTest(unittest.TestCase):
             make_repo(tmp, steps)
             out = Path(tmp) / "gh_output"
             env = dict(git_env(), GITHUB_OUTPUT=str(out))
-            res = subprocess.run([sys.executable, str(self.script)], cwd=tmp,  # nosec B603
-                                 env=env, capture_output=True, text=True)
+            cmd = [sys.executable, str(self.script)]
+            res = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True)  # nosec B603
             self.assertEqual(res.returncode, 0, res.stderr)
             data = dict(line.split("=", 1) for line in out.read_text().split())
         return data

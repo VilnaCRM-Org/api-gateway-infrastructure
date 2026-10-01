@@ -15,7 +15,8 @@ Rules:
 
 import os
 import re
-import subprocess  # nosec B404 - fixed read-only git argv, no shell
+import shutil
+import subprocess  # nosec B404
 import sys
 
 TAG_RE = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$", re.ASCII)
@@ -28,9 +29,12 @@ FIELD_SEP = "\x1f"
 
 
 def git(args, cwd):
-    return subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
-        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
-    ).stdout
+    exe = shutil.which("git")
+    if exe is None:
+        raise RuntimeError("git executable not found")
+    cmd = [exe, *args]
+    result = subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)  # nosec B603
+    return result.stdout
 
 
 def latest_release_tag(cwd):
