@@ -287,9 +287,9 @@ def parse_stack(stack: str, document: object) -> StackSettings:
 
 
 def check_stack_set(settings: Mapping[str, StackSettings]) -> None:
-    """Cross-stack rules: both shared stacks, one region, one account each."""
-    missing = [stack for stack in SHARED_STACKS if stack not in settings]
-    _require(not missing, f"Shared stack config is missing for {missing}.")
+    """Cross-stack rules: all three stacks, one region, one account each."""
+    missing = [stack for stack in STACKS if stack not in settings]
+    _require(not missing, f"Stack config is missing for {missing}.")
     owners: dict[str, str] = {}
     for stack, item in settings.items():
         other = owners.setdefault(item.account_id, stack)

@@ -43,7 +43,7 @@ def check(stack: str, documents: dict[str, dict]) -> config.StackSettings:
 
 def test_committed_stack_set_is_closed() -> None:
     names = set(committed_documents())
-    assert set(SHARED_STACKS) <= names <= {"test", "prod", "ci"}
+    assert names == {"test", "prod", "ci"}
     assert not (PULUMI_DIR / "Pulumi.example.yaml").exists()
 
 
@@ -238,10 +238,32 @@ def test_region_must_be_well_formed(region: object, documents: dict) -> None:
         config.parse_stack("test", documents["test"])
 
 
-def test_shared_stacks_are_required(documents: dict) -> None:
-    del documents["prod"]
-    with pytest.raises(ConfigError, match="prod"):
-        check("test", documents)
+@pytest.mark.parametrize("missing", ["test", "prod", "ci"])
+def test_every_stack_is_required(missing: str, documents: dict) -> None:
+    del documents[missing]
+    selected = "prod" if missing == "test" else "test"
+    with pytest.raises(ConfigError, match=missing):
+        check(selected, documents)
+
+
+def test_committed_ci_account_is_not_a_real_account() -> None:
+    ci = config.load_stack("ci", PULUMI_DIR)
+    shared = {config.load_stack(name, PULUMI_DIR).account_id for name in SHARED_STACKS}
+    assert len(shared) == 2
+    assert ci.account_id not in shared
+    assert ci.is_offline and ci.stub_live_invokes
+    assert ci.backend_url is None and ci.secrets_provider is None
+
+
+@pytest.mark.parametrize("stack", SHARED_STACKS)
+def test_shared_stack_with_the_ci_fixture_account_fails(
+    stack: str, documents: dict
+) -> None:
+    account = documents["ci"]["config"][key("awsAccountId")]
+    documents[stack]["config"][key("awsAccountId")] = account
+    documents[stack]["config"]["aws:allowedAccountIds"] = [account]
+    with pytest.raises(ConfigError, match="account"):
+        check(stack, documents)
 
 
 # --- N: feature flags -----------------------------------------------------------------

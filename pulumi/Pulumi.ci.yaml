@@ -1,0 +1,13 @@
+# Offline ci stack (AD-A15): the credential-free Structural Preview on a
+# local file backend. The passphrase provider's passphrase is intentionally
+# empty and non-secret; this stack holds no secret. The account is the AWS
+# documentation example account, never a real VilnaCRM account. The dummy-key
+# AWS provider is built in code (app/config.py), never set here.
+encryptionsalt: v1:Z5dK80UXwt8=:v1:5nXZ8YrI+G/5Clxu:xGIoaweHiXHeikK7sP18X3gmdPZy9w==
+config:
+  aws:region: eu-central-1
+  api-gateway-infrastructure:awsAccountId: "123456789012"
+  api-gateway-infrastructure:stub_live_invokes: true
+  api-gateway-infrastructure:features:
+    certificate: false
+    front_door: false
