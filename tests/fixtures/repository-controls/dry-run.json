@@ -1,0 +1,261 @@
+{
+  "branchPolicies": {
+    "prod": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ],
+    "prod-drift": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ],
+    "prod-preview": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ],
+    "test": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ],
+    "test-drift": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ],
+    "test-preview": [
+      {
+        "name": "main",
+        "type": "branch"
+      }
+    ]
+  },
+  "environments": {
+    "prod": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": true,
+        "protected_branches": false
+      },
+      "prevent_self_review": true,
+      "reviewers": [
+        {
+          "id": 9444106,
+          "type": "User"
+        }
+      ],
+      "wait_timer": 0
+    },
+    "prod-drift": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": true,
+        "protected_branches": false
+      },
+      "reviewers": [],
+      "wait_timer": 0
+    },
+    "prod-preview": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": true,
+        "protected_branches": false
+      },
+      "reviewers": [],
+      "wait_timer": 0
+    },
+    "test": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": true,
+        "protected_branches": false
+      },
+      "prevent_self_review": true,
+      "reviewers": [
+        {
+          "id": 9444106,
+          "type": "User"
+        }
+      ],
+      "wait_timer": 0
+    },
+    "test-drift": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": true,
+        "protected_branches": false
+      },
+      "reviewers": [],
+      "wait_timer": 0
+    },
+    "test-preview": {
+      "can_admins_bypass": false,
+      "deployment_branch_policy": {
+        "custom_branch_policies": true,
+        "protected_branches": false
+      },
+      "reviewers": [],
+      "wait_timer": 0
+    }
+  },
+  "reviewerLogin": "Kravalg",
+  "ruleset": {
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "~DEFAULT_BRANCH"
+        ]
+      }
+    },
+    "enforcement": "active",
+    "name": "main",
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      },
+      {
+        "parameters": {
+          "allowed_merge_methods": [
+            "squash"
+          ],
+          "dismiss_stale_reviews_on_push": true,
+          "require_code_owner_review": true,
+          "require_last_push_approval": true,
+          "required_approving_review_count": 1,
+          "required_review_thread_resolution": true,
+          "required_reviewers": []
+        },
+        "type": "pull_request"
+      },
+      {
+        "parameters": {
+          "required_status_checks": [
+            {
+              "context": "Ruff",
+              "integration_id": 15368
+            },
+            {
+              "context": "Types",
+              "integration_id": 15368
+            },
+            {
+              "context": "Maintainability",
+              "integration_id": 15368
+            },
+            {
+              "context": "Coverage",
+              "integration_id": 15368
+            },
+            {
+              "context": "Bandit",
+              "integration_id": 15368
+            },
+            {
+              "context": "Dependency Audit",
+              "integration_id": 15368
+            },
+            {
+              "context": "Secrets Scan",
+              "integration_id": 15368
+            },
+            {
+              "context": "Actionlint",
+              "integration_id": 15368
+            },
+            {
+              "context": "Zizmor",
+              "integration_id": 15368
+            },
+            {
+              "context": "Yamllint",
+              "integration_id": 15368
+            },
+            {
+              "context": "Hadolint",
+              "integration_id": 15368
+            },
+            {
+              "context": "Dependency Review",
+              "integration_id": 15368
+            },
+            {
+              "context": "CodeQL (python)",
+              "integration_id": 15368
+            },
+            {
+              "context": "CodeQL (actions)",
+              "integration_id": 15368
+            },
+            {
+              "context": "Structural Preview",
+              "integration_id": 15368
+            },
+            {
+              "context": "Destructive Diff Gate",
+              "integration_id": 15368
+            },
+            {
+              "context": "IAM Gate",
+              "integration_id": 15368
+            },
+            {
+              "context": "Policy",
+              "integration_id": 15368
+            },
+            {
+              "context": "Contract Schema",
+              "integration_id": 15368
+            }
+          ],
+          "strict_required_status_checks_policy": true
+        },
+        "type": "required_status_checks"
+      }
+    ],
+    "target": "branch"
+  },
+  "variables": {
+    "prod": {
+      "AWS_APPLY_ROLE_ARN": "arn:aws:iam::{account:prod}:role/GitHubCiApply-api-gateway-infrastructure-prod",
+      "PULUMI_BACKEND_URL": "s3://pulumi-api-gateway-infrastructure-prod-state",
+      "PULUMI_SECRETS_PROVIDER": "awskms://alias/pulumi-api-gateway-infrastructure-prod-secrets?region=eu-central-1"
+    },
+    "prod-drift": {
+      "AWS_DRIFT_ROLE_ARN": "arn:aws:iam::{account:prod}:role/GitHubCiDrift-api-gateway-infrastructure-prod",
+      "PULUMI_BACKEND_URL": "s3://pulumi-api-gateway-infrastructure-prod-state",
+      "PULUMI_SECRETS_PROVIDER": "awskms://alias/pulumi-api-gateway-infrastructure-prod-secrets?region=eu-central-1"
+    },
+    "prod-preview": {
+      "AWS_PREVIEW_ROLE_ARN": "arn:aws:iam::{account:prod}:role/GitHubCiPreview-api-gateway-infrastructure-prod",
+      "PULUMI_BACKEND_URL": "s3://pulumi-api-gateway-infrastructure-prod-state",
+      "PULUMI_SECRETS_PROVIDER": "awskms://alias/pulumi-api-gateway-infrastructure-prod-secrets?region=eu-central-1"
+    },
+    "test": {
+      "AWS_APPLY_ROLE_ARN": "arn:aws:iam::{account:test}:role/GitHubCiApply-api-gateway-infrastructure-test",
+      "PULUMI_BACKEND_URL": "s3://pulumi-api-gateway-infrastructure-test-state",
+      "PULUMI_SECRETS_PROVIDER": "awskms://alias/pulumi-api-gateway-infrastructure-test-secrets?region=eu-central-1"
+    },
+    "test-drift": {
+      "AWS_DRIFT_ROLE_ARN": "arn:aws:iam::{account:test}:role/GitHubCiDrift-api-gateway-infrastructure-test",
+      "PULUMI_BACKEND_URL": "s3://pulumi-api-gateway-infrastructure-test-state",
+      "PULUMI_SECRETS_PROVIDER": "awskms://alias/pulumi-api-gateway-infrastructure-test-secrets?region=eu-central-1"
+    },
+    "test-preview": {
+      "AWS_PREVIEW_ROLE_ARN": "arn:aws:iam::{account:test}:role/GitHubCiPreview-api-gateway-infrastructure-test",
+      "PULUMI_BACKEND_URL": "s3://pulumi-api-gateway-infrastructure-test-state",
+      "PULUMI_SECRETS_PROVIDER": "awskms://alias/pulumi-api-gateway-infrastructure-test-secrets?region=eu-central-1"
+    }
+  }
+}

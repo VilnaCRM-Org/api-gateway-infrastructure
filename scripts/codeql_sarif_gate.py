@@ -23,17 +23,51 @@ class GateError(Exception):
     """The SARIF output is missing or malformed."""
 
 
+def first(items: object) -> dict:
+    """Return the first element of a SARIF list when it is an object."""
+    head = items[0] if isinstance(items, list) and items else None
+    return head if isinstance(head, dict) else {}
+
+
+def place(location: dict) -> str:
+    """Return `uri:line` of one SARIF location (`?` for a missing part)."""
+    physical = location.get("physicalLocation") or {}
+    uri = (physical.get("artifactLocation") or {}).get("uri", "?")
+    line = (physical.get("region") or {}).get("startLine", "?")
+    return f"{uri}:{line}"
+
+
+def label(location: dict) -> str:
+    """Return `uri:line: message` for a related location or a flow step."""
+    text = (location.get("message") or {}).get("text")
+    return f"{place(location)}: {text}" if text else place(location)
+
+
+def sources(result: dict) -> str:
+    """Return the first related location and the first code-flow step.
+
+    Both come straight from the SARIF result, so CI shows where a
+    taint-tracking result starts (the `[1]` in its message) and nothing else.
+    """
+    parts = []
+    related = first(result.get("relatedLocations"))
+    if related:
+        parts.append(f"related: {label(related)}")
+    thread = first(first(result.get("codeFlows")).get("threadFlows"))
+    step = first(thread.get("locations")).get("location")
+    if isinstance(step, dict) and step:
+        parts.append(f"flow source: {label(step)}")
+    return "".join(f" [{part}]" for part in parts)
+
+
 def describe(result: dict) -> str:
     rule = result.get("ruleId", "<no rule id>")
     message = (result.get("message") or {}).get("text", "")
     where = "<no location>"
-    for location in result.get("locations") or []:
-        physical = location.get("physicalLocation") or {}
-        uri = (physical.get("artifactLocation") or {}).get("uri", "?")
-        line = (physical.get("region") or {}).get("startLine", "?")
-        where = f"{uri}:{line}"
-        break
-    return f"{where}: {rule}: {message}"
+    locations = result.get("locations")
+    if isinstance(locations, list) and locations:
+        where = place(first(locations))
+    return f"{where}: {rule}: {message}{sources(result)}"
 
 
 def file_results(path: Path) -> list[dict]:
