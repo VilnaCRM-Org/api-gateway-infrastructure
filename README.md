@@ -37,13 +37,18 @@ Execute `make` or `make help` to see the full list of project commands.
 The list of the `make` possibilities:
 
 ```
-build           Builds the images (PHP, caddy)
-down            Stop the docker hub
-pulumi          Pulumi enables you to safely and predictably create, change, and improve infrastructure.
-sh              Log to the docker container
-start           Docker container with terraspace and terraform
-up              Start the container for development
+build           Build the development image (pinned, checksum-verified tools).
+clean           Remove containers, Python caches and coverage data.
+down            Stop the development container.
+help            Display the available Make targets.
+sh              Open a shell in the running development container (after make start).
+start           Build the image and start the development container.
+test            Run every test under tests/ on the frozen lockfile.
+test-lockfile   Fail when pyproject.toml and uv.lock disagree.
+up              Start the development container.
 ```
+
+The Python toolchain is [uv](https://docs.astral.sh/uv/) with the frozen, hash-pinned `uv.lock` at the repository root (Python 3.11, `pulumi-aws` 7.23.0). The Pulumi program lives in `pulumi/`; its stacks are `test` and `prod` (the offline `ci` stack of AD-A15 follows), and `pulumi/app/config.py` refuses any stack config outside that closed shape.
 
 ## Documentation
 Start reading at the [GitHub wiki](https://github.com/VilnaCRM-Org/infrastructure-template/wiki). If you're having trouble, head for [the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting) as it's frequently updated.
