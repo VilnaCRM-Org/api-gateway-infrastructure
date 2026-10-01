@@ -1,9 +1,15 @@
-"""Fail-closed checks for GitHub workflow and composite-action files (G2.1).
+"""Fail-closed checks for GitHub workflow and composite-action files.
 
-Files are parsed with PyYAML ``safe_load`` (duplicate keys rejected). PyYAML
-is a G3.1 dev dependency; when it is not importable every check raises, so
-the tests fail instead of skipping. Anything the checks cannot interpret is
-reported as a violation.
+G2.1 added the shape checks; G3.2 adds the PR quality battery checks
+(``check_battery``) and the G2.1 hand-offs F-34 (pinned autorelease
+``concurrency``, checkout ``with`` and ``if`` values), F-35 (``&``, ``<``
+and ``>`` in autorelease run commands) and F-36 (whitespace forms of
+``secrets`` and non-core YAML tags).
+
+Files are parsed with a PyYAML ``SafeLoader`` subclass that rejects duplicate
+keys, merge keys and non-core tags. PyYAML is a G3.1 dev dependency; when it
+is not importable every check raises, so the tests fail instead of skipping.
+Anything the checks cannot interpret is reported as a violation.
 """
 
 import re
@@ -16,11 +22,17 @@ except ImportError:  # pragma: no cover - exercised only without PyYAML
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SECRET_RES = (
-    re.compile(r"\bsecrets\."),
-    re.compile(r"\bsecrets\["),
+    re.compile(r"\bsecrets\s*\."),
+    re.compile(r"\bsecrets\s*\["),
     re.compile(r"toJSON\(\s*secrets\b", re.IGNORECASE),
-    re.compile(r"\bsecrets:\s*inherit\b"),
+    re.compile(r"\bsecrets\s*:\s*inherit\b"),
 )
+EXPRESSION_RE = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
+QUOTED_RE = re.compile(r"'(?:[^']|'')*'")
+SECRETS_CONTEXT_RE = re.compile(r"(?<![\w.-])secrets(?![\w-])")
+# YAML 1.1 types that the GitHub (YAML 1.2 core schema) parser reads as
+# strings or does not support. PyYAML would build other values from them.
+NON_CORE_TAGS = ("binary", "timestamp", "omap", "pairs", "set")
 
 
 def require_yaml():
@@ -53,7 +65,14 @@ def _loader():
             seen.add(key)
         return yaml.SafeLoader.construct_mapping(loader, node, deep)
 
+    def reject(loader, node):
+        raise yaml.constructor.ConstructorError(
+            None, None, f"non-core YAML tag {node.tag!r}", node.start_mark
+        )
+
     Loader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct)
+    for tag in NON_CORE_TAGS:
+        Loader.add_constructor(f"tag:yaml.org,2002:{tag}", reject)
     return Loader
 
 
@@ -87,12 +106,41 @@ def iter_strings(node):
             yield from iter_strings(item)
 
 
+def iter_if_values(node):
+    """Yield every ``if:`` value; GitHub reads them as expressions."""
+    if isinstance(node, dict):
+        for k, val in node.items():
+            if k == "if" and isinstance(val, str):
+                yield val
+            yield from iter_if_values(val)
+    elif isinstance(node, list):
+        for item in node:
+            yield from iter_if_values(item)
+
+
 def has_secrets_key(node):
     if isinstance(node, dict):
         return "secrets" in node or any(has_secrets_key(v) for v in node.values())
     if isinstance(node, list):
         return any(has_secrets_key(i) for i in node)
     return False
+
+
+def expression_uses_secrets(expression):
+    """True when an expression names the ``secrets`` context in any form."""
+    return bool(SECRETS_CONTEXT_RE.search(QUOTED_RE.sub("''", expression)))
+
+
+def mentions_secrets(doc):
+    """True when any string, expression, ``if:`` value or key uses secrets."""
+    strings = list(iter_strings(doc))
+    expressions = [e for s in strings for e in EXPRESSION_RE.findall(s)]
+    expressions += list(iter_if_values(doc))
+    return (
+        has_secrets_key(doc)
+        or any(rx.search(s) for s in strings for rx in SECRET_RES)
+        or any(expression_uses_secrets(e) for e in expressions)
+    )
 
 
 def get_events(doc, violations):
@@ -138,6 +186,35 @@ def _perms_ok(perms):
     )
 
 
+def _jobs(doc, violations):
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict) or not jobs:
+        violations.append("`jobs:` must be a non-empty mapping")
+        return {}
+    for name, job in jobs.items():
+        if not isinstance(job, dict):
+            violations.append(f"job {name}: must be a mapping")
+            continue
+        if "uses" in job:
+            _check_uses(f"job {name}", job["uses"], violations)
+        _check_steps(f"job {name}", job.get("steps"), violations)
+    return jobs
+
+
+def _check_pull_request(doc, jobs, violations):
+    top = doc.get("permissions")
+    for name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        perms = job["permissions"] if "permissions" in job else top
+        if not _perms_ok(perms):
+            violations.append(
+                f"job {name}: pull_request job must be contents: read only"
+            )
+    if mentions_secrets(doc):
+        violations.append("secrets are forbidden in pull_request workflows")
+
+
 def check_workflow(text):
     """Return a list of violation strings for one workflow file."""
     v = []
@@ -145,33 +222,13 @@ def check_workflow(text):
     if doc is None:
         return v
     events = get_events(doc, v)
-    jobs = doc.get("jobs")
-    if not isinstance(jobs, dict) or not jobs:
-        v.append("`jobs:` must be a non-empty mapping")
-        jobs = {}
-    for name, job in jobs.items():
-        if not isinstance(job, dict):
-            v.append(f"job {name}: must be a mapping")
-            continue
-        if "uses" in job:
-            _check_uses(f"job {name}", job["uses"], v)
-        _check_steps(f"job {name}", job.get("steps"), v)
+    jobs = _jobs(doc, v)
     if events is None:
         return v
     if "pull_request_target" in events:
         v.append("pull_request_target is forbidden")
     if "pull_request" in events:
-        top = doc.get("permissions")
-        for name, job in jobs.items():
-            if not isinstance(job, dict):
-                continue
-            perms = job["permissions"] if "permissions" in job else top
-            if not _perms_ok(perms):
-                v.append(f"job {name}: pull_request job must be contents: read only")
-        if has_secrets_key(doc) or any(
-            rx.search(string) for string in iter_strings(doc) for rx in SECRET_RES
-        ):
-            v.append("secrets are forbidden in pull_request workflows")
+        _check_pull_request(doc, jobs, v)
     return v
 
 
@@ -189,21 +246,8 @@ def check_action(text):
     return v
 
 
-ALLOWED_RUN = re.compile(
-    r"^(python3 scripts/next_release_version\.py|gh release create)(\s|$)"
-)
-FORBIDDEN_RUN = re.compile(
-    r"\bgh\s+api\b|\bcurl\b|\bwget\b|\bgit\s+(push|commit|add|tag(?!\s+--list))\b"
-)
-SHELL_CHAINING = re.compile(r";|&&|\|\||\||`|\$\(|#")
-JOB_KEYS = {"runs-on", "timeout-minutes", "permissions", "steps"}
-STEP_KEYS = {"name", "id", "uses", "with", "run", "if", "env"}
-ENV_KEYS = {"GH_TOKEN", "TAG"}
-WITH_KEYS = {"fetch-depth", "persist-credentials"}
-CHECKOUT_RE = re.compile(r"^actions/checkout@[0-9a-f]{40}$")
-
-
-def _commands(run):
+def commands(run):
+    """Split a ``run:`` script into commands, joining ``\\`` continuations."""
     cmds, acc = [], ""
     for raw in str(run).splitlines():
         line = raw.strip()
@@ -219,12 +263,45 @@ def _commands(run):
     return cmds
 
 
-def check_autorelease(text):
-    """Extra shape rules for autorelease.yml (PD-11)."""
-    v = check_workflow(text)
-    doc = load(text, [])
-    if doc is None:
-        return v
+def _steps(job):
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return []
+    return [step for step in steps if isinstance(step, dict)]
+
+
+def _job_items(doc):
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict):
+        return []
+    return [(name, job) for name, job in jobs.items() if isinstance(job, dict)]
+
+
+# --- autorelease (PD-11) ---------------------------------------------------
+
+ALLOWED_RUN = re.compile(
+    r"^(python3 scripts/next_release_version\.py|gh release create)(\s|$)"
+)
+FORBIDDEN_RUN = re.compile(
+    r"\bgh\s+api\b|\bcurl\b|\bwget\b|\bgit\s+(push|commit|add|tag(?!\s+--list))\b"
+)
+# F-35: `&` (background and `&&`), `<`/`>` (redirection and `<( >(`
+# process substitution) join the G2.1 list.
+SHELL_CHAINING = re.compile(r"[;&|`#<>]|\$\(")
+TOP_KEYS = {"name", "on", True, "concurrency", "permissions", "jobs"}
+JOB_KEYS = {"name", "runs-on", "timeout-minutes", "permissions", "steps"}
+AUTORELEASE_JOB_NAME = "Release"
+STEP_KEYS = {"name", "id", "uses", "with", "run", "if", "env"}
+ENV_KEYS = {"GH_TOKEN", "TAG"}
+GH_TOKEN = "${{ github.token }}"  # nosec B105  # expression text, not a token
+CHECKOUT_RE = re.compile(r"^actions/checkout@[0-9a-f]{40}$")
+# F-34: values pinned exactly, not only key names.
+AUTORELEASE_CONCURRENCY = {"group": "autorelease", "cancel-in-progress": False}
+AUTORELEASE_CHECKOUT_WITH = {"fetch-depth": 0, "persist-credentials": False}
+AUTORELEASE_IFS = {"steps.version.outputs.skipped == 'false'"}
+
+
+def _autorelease_top(doc, v):
     on = doc.get("on", doc.get(True))
     if not (isinstance(on, dict) and set(on) == {"push"}):
         v.append("autorelease must trigger on push only")
@@ -232,61 +309,235 @@ def check_autorelease(text):
         v.append(f"push filters must be exactly branches: [main], got {on['push']}")
     if doc.get("permissions") != {}:
         v.append("autorelease top-level permissions must be {}")
-    if any(re.search(r"\bsecrets\b", string) for string in iter_strings(doc)) or has_secrets_key(doc):
+    strings = iter_strings(doc)
+    if any(re.search(r"\bsecrets\b", s) for s in strings) or has_secrets_key(doc):
         v.append("autorelease must not reference secrets (use github.token)")
-    extra = set(doc) - {"name", "on", True, "concurrency", "permissions", "jobs"}
+    extra = set(doc) - TOP_KEYS
     if extra:
         v.append(f"top-level keys not allowed: {sorted(map(str, extra))}")
-    jobs = doc.get("jobs") if isinstance(doc.get("jobs"), dict) else {}
+    if doc.get("concurrency") != AUTORELEASE_CONCURRENCY:
+        v.append(f"concurrency must be exactly {AUTORELEASE_CONCURRENCY}")
+
+
+def _autorelease_job(name, job, v):
+    if job.get("permissions") != {"contents": "write"}:
+        v.append(f"job {name}: permissions must be exactly contents: write")
+    if "uses" in job:
+        v.append(f"job {name}: reusable workflows are not allowed")
+    bad = set(job) - JOB_KEYS
+    if bad:
+        v.append(f"job {name}: keys not allowed: {sorted(bad)}")
+    if job.get("runs-on") != "ubuntu-latest":
+        v.append(f"job {name}: runs-on must be ubuntu-latest")
+    if job.get("name") != AUTORELEASE_JOB_NAME:
+        v.append(f"job {name}: name must be {AUTORELEASE_JOB_NAME!r}")
+
+
+def _autorelease_step_keys(step, v):
+    bad = set(step) - STEP_KEYS
+    if bad:
+        v.append(f"step keys not allowed: {sorted(bad)}")
+    env = step.get("env") or {}
+    if not isinstance(env, dict) or set(env) - ENV_KEYS:
+        v.append(f"step env keys must be within {sorted(ENV_KEYS)}")
+    elif env.get("GH_TOKEN", GH_TOKEN) != GH_TOKEN:
+        v.append("env.GH_TOKEN must be ${{ github.token }}")
+    if "if" in step and step["if"] not in AUTORELEASE_IFS:
+        v.append(f"step if must be one of {sorted(AUTORELEASE_IFS)}")
+
+
+def _autorelease_step_token(step, v):
+    for key, val in step.items():
+        if key == "env" and isinstance(val, dict):
+            val = {k: x for k, x in val.items() if k != "GH_TOKEN"}
+        if any("github.token" in x for x in iter_strings(val)):
+            v.append(f"github.token is only allowed as env.GH_TOKEN (step key {key})")
+
+
+def _autorelease_step_uses(step, v):
+    if "uses" not in step:
+        if "with" in step:
+            v.append("step with is only allowed on the checkout step")
+        return
+    if not CHECKOUT_RE.match(str(step["uses"])):
+        v.append(f"uses {step['uses']!r}: only actions/checkout@<sha> is allowed")
+    if step.get("with") != AUTORELEASE_CHECKOUT_WITH:
+        v.append(f"checkout with must be exactly {AUTORELEASE_CHECKOUT_WITH}")
+
+
+def _autorelease_run(step, v):
     ran = 0
-    for name, job in jobs.items():
-        if not isinstance(job, dict):
-            continue
-        if job.get("permissions") != {"contents": "write"}:
-            v.append(f"job {name}: permissions must be exactly contents: write")
-        if "uses" in job:
-            v.append(f"job {name}: reusable workflows are not allowed")
-        bad = set(job) - JOB_KEYS
-        if bad:
-            v.append(f"job {name}: keys not allowed: {sorted(bad)}")
-        if job.get("runs-on") != "ubuntu-latest":
-            v.append(f"job {name}: runs-on must be ubuntu-latest")
-        for step in job.get("steps") or []:
-            if not isinstance(step, dict):
-                continue
-            bad = set(step) - STEP_KEYS
-            if bad:
-                v.append(f"step keys not allowed: {sorted(bad)}")
-            env = step.get("env") or {}
-            if not isinstance(env, dict) or set(env) - ENV_KEYS:
-                v.append(f"step env keys must be within {sorted(ENV_KEYS)}")
-            with_ = step.get("with") or {}
-            if not isinstance(with_, dict) or set(with_) - WITH_KEYS:
-                v.append(f"step with keys must be within {sorted(WITH_KEYS)}")
-            for key, val in step.items():
-                if key == "env" and isinstance(val, dict):
-                    val = {k: x for k, x in val.items() if k != "GH_TOKEN"}
-                if any("github.token" in x for x in iter_strings(val)):
-                    v.append(f"github.token is only allowed as env.GH_TOKEN (step key {key})")
-            if isinstance(env, dict) and env.get("GH_TOKEN", "${{ github.token }}") != "${{ github.token }}":
-                v.append("env.GH_TOKEN must be ${{ github.token }}")
-            if "uses" in step and not CHECKOUT_RE.match(str(step["uses"])):
-                v.append(f"uses {step['uses']!r}: only actions/checkout@<sha> is allowed")
-            if "run" in step:
-                for cmd in _commands(step["run"]):
-                    ran += 1
-                    if SHELL_CHAINING.search(cmd):
-                        v.append(f"shell chaining in run command: {cmd!r}")
-                    if FORBIDDEN_RUN.search(cmd):
-                        v.append(f"forbidden command in run step: {cmd!r}")
-                    if not ALLOWED_RUN.match(cmd):
-                        v.append(f"run command not on the allow list: {cmd!r}")
+    for cmd in commands(step.get("run", "")):
+        ran += 1
+        if SHELL_CHAINING.search(cmd):
+            v.append(f"shell chaining in run command: {cmd!r}")
+        if FORBIDDEN_RUN.search(cmd):
+            v.append(f"forbidden command in run step: {cmd!r}")
+        if not ALLOWED_RUN.match(cmd):
+            v.append(f"run command not on the allow list: {cmd!r}")
+    return ran
+
+
+def check_autorelease(text):
+    """Extra shape rules for autorelease.yml (PD-11)."""
+    v = check_workflow(text)
+    doc = load(text, [])
+    if doc is None:
+        return v
+    _autorelease_top(doc, v)
+    ran = 0
+    for name, job in _job_items(doc):
+        _autorelease_job(name, job, v)
+        for step in _steps(job):
+            _autorelease_step_keys(step, v)
+            _autorelease_step_token(step, v)
+            _autorelease_step_uses(step, v)
+            ran += _autorelease_run(step, v)
     if not ran:
         v.append("autorelease has no run commands to inspect")
     return v
 
 
-# --- repository grep ---------------------------------------------------
+# --- PR quality battery (G3.2, AD-A11, FR-A08, FR-A10) ---------------------
+
+BATTERY_EVENTS = {"push", "pull_request", "schedule"}
+BATTERY_RUN = re.compile(
+    r"^(make (build|test-[a-z-]+)|python3 scripts/codeql_sarif_gate\.py "
+    r'"\$RUNNER_TEMP/codeql-results")$'
+)
+BATTERY_FORBIDDEN_JOB_KEYS = {
+    "container",
+    "env",
+    "environment",
+    "permissions",
+    "secrets",
+    "services",
+    "uses",
+}
+BATTERY_CHECKOUT_WITH_KEYS = {"persist-credentials", "fetch-depth"}
+# G3.2 F03: the one place the battery may use the job's read-only token
+# (contents: read; forks get a read-only token too): the env of the `Zizmor`
+# job's online step, for impostor-commit, ref-confusion and
+# known-vulnerable-actions.
+ZIZMOR_JOB = "Zizmor"
+ZIZMOR_ONLINE_RUN = "make test-zizmor-online"
+ZIZMOR_ONLINE_ENV = {"GH_TOKEN": GH_TOKEN}
+
+
+def _is_zizmor_online_step(job, step):
+    return (
+        job.get("name") == ZIZMOR_JOB
+        and step.get("run") == ZIZMOR_ONLINE_RUN
+        and step.get("env") == ZIZMOR_ONLINE_ENV
+        and set(step) <= {"name", "run", "env"}
+    )
+
+
+def _without_allowed_token(doc):
+    """A copy of `doc` without the env of the allowed Zizmor online step."""
+    jobs = {}
+    for name, job in _job_items(doc):
+        steps = [
+            {k: x for k, x in step.items() if k != "env"}
+            if _is_zizmor_online_step(job, step)
+            else step
+            for step in _steps(job)
+        ]
+        jobs[name] = dict(job, steps=steps)
+    return dict(doc, jobs=jobs)
+
+
+def _battery_top(doc, v):
+    events = get_events(doc, []) or set()
+    if "pull_request" not in events:
+        v.append("battery workflows must run on pull_request")
+    if events - BATTERY_EVENTS:
+        v.append(f"battery events must be within {sorted(BATTERY_EVENTS)}")
+    on = doc.get("on", doc.get(True))
+    if isinstance(on, dict):
+        if on.get("pull_request") is not None:
+            v.append("pull_request must have no filters, so every PR runs it")
+        if "push" in on and on["push"] != {"branches": ["main"]}:
+            v.append("push filters must be exactly branches: [main]")
+    if doc.get("permissions") != {"contents": "read"}:
+        v.append("battery top-level permissions must be exactly contents: read")
+    if "env" in doc:
+        v.append("battery workflows must not set top-level env")
+    if any("github.token" in s for s in iter_strings(_without_allowed_token(doc))):
+        v.append(
+            "github.token is only allowed as the Zizmor online step's env GH_TOKEN"
+        )
+
+
+def _battery_checkout(where, step, v):
+    with_ = step.get("with")
+    if not isinstance(with_, dict) or with_.get("persist-credentials") is not False:
+        v.append(f"{where}: checkout needs persist-credentials: false")
+        return
+    if set(with_) - BATTERY_CHECKOUT_WITH_KEYS:
+        v.append(f"{where}: checkout with keys not allowed: {sorted(with_)}")
+    if with_.get("fetch-depth", 0) != 0:
+        v.append(f"{where}: checkout fetch-depth may only be 0")
+
+
+def _battery_step(where, step, v, token_step=False):
+    uses = str(step.get("uses", ""))
+    if uses.startswith("actions/checkout@"):
+        _battery_checkout(where, step, v)
+    if "env" in step and not token_step:
+        v.append(f"{where}: battery steps must not set env")
+    run = step.get("run")
+    if run is None:
+        return
+    if "${{" in str(run):
+        v.append(f"{where}: run must not interpolate expressions")
+    for cmd in commands(run):
+        if not BATTERY_RUN.match(cmd):
+            v.append(f"{where}: run command not on the battery allow list: {cmd!r}")
+
+
+def check_battery(text):
+    """Shape rules for the battery workflows (python-quality, security-scans,
+    codeql): every job is unprivileged, secret-free and runs only make
+    targets or the SARIF gate."""
+    v = check_workflow(text)
+    doc = load(text, [])
+    if doc is None:
+        return v
+    _battery_top(doc, v)
+    for name, job in _job_items(doc):
+        bad = set(job) & BATTERY_FORBIDDEN_JOB_KEYS
+        if bad:
+            v.append(f"job {name}: keys not allowed in the battery: {sorted(bad)}")
+        if job.get("runs-on") != "ubuntu-latest":
+            v.append(f"job {name}: runs-on must be ubuntu-latest")
+        if not isinstance(job.get("name"), str):
+            v.append(f"job {name}: needs a check name")
+        for i, step in enumerate(_steps(job)):
+            token_step = _is_zizmor_online_step(job, step)
+            _battery_step(f"job {name} step {i}", step, v, token_step)
+    return v
+
+
+def job_check_names(text):
+    """Return the check names a workflow's jobs report, matrix-expanded."""
+    doc = load(text, [])
+    names = []
+    for _, job in _job_items(doc or {}):
+        matrix = (job.get("strategy") or {}).get("matrix") or {}
+        if not isinstance(matrix, dict) or {"include", "exclude"} & set(matrix):
+            raise ValueError("only plain list matrices can be expanded")
+        expanded = [str(job.get("name"))]
+        for axis, values in matrix.items():
+            if not isinstance(values, list):
+                raise ValueError(f"matrix axis {axis!r} is not a list")
+            token = "${{ matrix." + axis + " }}"
+            expanded = [n.replace(token, str(x)) for n in expanded for x in values]
+        names.extend(expanded)
+    return names
+
+
+# --- repository grep -------------------------------------------------------
 
 FORBIDDEN_STRINGS = (
     "PERSONAL_ACCESS_TOKEN",
@@ -297,8 +548,14 @@ FORBIDDEN_STRINGS = (
 )
 GITHUB_DIR_FORBIDDEN = ("aws-secret-access-key", "AWS_SECRET_ACCESS_KEY")
 SKIP_TOP = {".git", "specs", "tests"}
-SKIP_ANY = {".venv", "__pycache__", "node_modules", ".mypy_cache",
-            ".pytest_cache", ".ruff_cache"}
+SKIP_ANY = {
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+}
 
 
 def iter_repo_files(root):

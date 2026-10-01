@@ -5,7 +5,7 @@ Repo-local rules for `api-gateway-infrastructure`, the Pulumi program for the Vi
 ## Working rules
 
 1. Make the smallest change that satisfies the task; preserve the local Docker workflow (`make start`, `make sh`).
-2. Run the narrowest useful validation for the files you touched. All tests, including the workflow and hygiene checks: `make test` (`uv run --frozen pytest` in the development image). The lockfile check is `make test-lockfile`. PyYAML is a locked dependency; the tests fail (never skip) when it is missing.
+2. Run the narrowest useful validation for the files you touched. All tests, including the workflow and hygiene checks: `make test` (`uv run --frozen pytest` in the development image). The lockfile check is `make test-lockfile`. The PR quality battery is `make test-battery` (one target per required check; see README "PR quality battery"). PyYAML is a locked dependency; the tests fail (never skip) when it is missing.
 3. Use `pulumi -C pulumi ...` for direct Pulumi CLI commands, and only against a stack the task names.
 4. Prefer Make targets and Python helpers over new bash scripts for CI orchestration.
 

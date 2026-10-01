@@ -12,9 +12,17 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "bandit[toml]>=1.9.4,<2",
     "coverage[toml]>=7.6,<8",
+    "pip-audit>=2.9,<3",
     "pytest>=8.0,<10",
     "pyyaml>=6,<7",
+    "radon>=6.0.1,<7",
+    "ruff>=0.15.6,<1",
+    "ty>=0.0.21,<0.1",
+    "xenon>=0.9,<1",
+    "yamllint>=1.35,<2",
+    "zizmor>=1.30,<2",
 ]
 
 [tool.uv]
@@ -23,11 +31,48 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
-pythonpath = ["pulumi", "tests"]
+pythonpath = ["pulumi", "scripts", "tests"]
+
+# G3.2 battery (AD-A11, FR-A10). Thresholds are the USI ones the battery is
+# ported from; none is softened.
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["pulumi", "scripts", "tests"]
+extend-exclude = ["specs"]
+
+[tool.ruff.lint]
+select = ["C90", "E", "F", "I"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+# `pulumi/` is the program directory, not the `pulumi` SDK package: without
+# this, ruff sorts `import pulumi` as first-party.
+known-first-party = [
+    "app",
+    "bandit_gate",
+    "codeql_sarif_gate",
+    "next_release_version",
+    "stack_fixtures",
+    "workflow_checks",
+]
+known-third-party = ["pulumi", "pulumi_aws"]
+
+[tool.ty.environment]
+python-version = "3.11"
+extra-paths = ["pulumi", "scripts", "tests"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "specs"]
 
 [tool.coverage.run]
 branch = true
-source = ["pulumi"]
+# NFR-A09: 100% branch coverage on pulumi/, scripts/ and, once G3.3 adds it,
+# policy/ (tests/test_quality_battery.py fails until policy/ is listed here).
+source = ["pulumi", "scripts"]
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 100

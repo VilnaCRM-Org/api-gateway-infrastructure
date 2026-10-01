@@ -85,7 +85,7 @@ ENGINE_ENV_ALLOWED = frozenset(
 # offline `ci` preview with pulumi 3.223.0 passes exactly the stack file's
 # keys (evidence log 20), so this allow-list is empty.
 ENGINE_ADDED_KEYS: frozenset[str] = frozenset()
-PREVIEW_KEY = "pulumi-preview"  # nosec B105 - non-secret dummy for the offline stack
+PREVIEW_KEY = "pulumi-preview"  # non-secret offline-stack dummy
 
 _ACCOUNT = re.compile(r"[0-9]{12}")
 _REGION = re.compile(r"[a-z]{2}(?:-[a-z]+)+-[0-9]+")
@@ -152,6 +152,13 @@ class StackSettings:
 def _require(condition: object, message: str) -> None:
     if not condition:
         raise ConfigError(message)
+
+
+def _mapping(value: object, message: str) -> dict[str, Any]:
+    """Return `value` typed as a mapping, or raise ConfigError(message)."""
+    if not isinstance(value, dict):
+        raise ConfigError(message)
+    return value
 
 
 def _key(name: str) -> str:
@@ -237,13 +244,16 @@ def _check_keys(stack: str, values: Mapping[str, Any]) -> None:
 
 
 def _features(stack: str, value: object) -> Features:
-    _require(
-        isinstance(value, dict)
-        and set(value) == set(FEATURES)
-        and all(isinstance(value[name], bool) for name in FEATURES),
-        f"Stack {stack!r} 'features' must set exactly {list(FEATURES)} to booleans.",
+    message = (
+        f"Stack {stack!r} 'features' must set exactly {list(FEATURES)} to booleans."
     )
-    features = Features(**value)
+    flags = _mapping(value, message)
+    _require(
+        set(flags) == set(FEATURES)
+        and all(isinstance(flags[name], bool) for name in FEATURES),
+        message,
+    )
+    features = Features(**flags)
     _require(
         features.certificate or not features.front_door,
         f"Stack {stack!r}: 'features.front_door' needs 'features.certificate'.",
@@ -286,10 +296,11 @@ def _check_shared_pins(
 def parse_stack(stack: str, document: object) -> StackSettings:
     """Validate one stack document (a parsed `Pulumi.<stack>.yaml`)."""
     _require(stack in STACKS, f"Unknown stack {stack!r}; allowed: {list(STACKS)}.")
-    _require(isinstance(document, dict), f"Stack {stack!r} must be a YAML mapping.")
-    _check_top_level(stack, document)
-    values = document.get("config")
-    _require(isinstance(values, dict), f"Stack {stack!r} 'config' must be a mapping.")
+    mapping = _mapping(document, f"Stack {stack!r} must be a YAML mapping.")
+    _check_top_level(stack, mapping)
+    values = _mapping(
+        mapping.get("config"), f"Stack {stack!r} 'config' must be a mapping."
+    )
     _check_keys(stack, values)
 
     account = values[_key("awsAccountId")]
@@ -310,7 +321,7 @@ def parse_stack(stack: str, document: object) -> StackSettings:
 
     backend = secrets = None
     if stack in SHARED_STACKS:
-        backend, secrets = _check_shared_pins(stack, document, values, account)
+        backend, secrets = _check_shared_pins(stack, mapping, values, account)
     return StackSettings(
         stack=stack,
         account_id=account,
@@ -392,8 +403,9 @@ def _read_yaml(path: Path) -> object:
 
 def read_program(program_dir: Path) -> tuple[str, dict[str, object]]:
     """Return the project name and every stack document in `program_dir`."""
-    manifest = _read_yaml(program_dir / "Pulumi.yaml")
-    _require(isinstance(manifest, dict), "Pulumi.yaml must be a YAML mapping.")
+    manifest = _mapping(
+        _read_yaml(program_dir / "Pulumi.yaml"), "Pulumi.yaml must be a YAML mapping."
+    )
     project = manifest.get("name")
     _require(project == PROJECT, f"Pulumi project must be {PROJECT!r}.")
     unknown = sorted(set(manifest) - MANIFEST_KEYS)
@@ -413,7 +425,7 @@ def read_program(program_dir: Path) -> tuple[str, dict[str, object]]:
         path.name[len("Pulumi.") : -len(".yaml")]: _read_yaml(path)
         for path in sorted(program_dir.glob("Pulumi.*.yaml"))
     }
-    return project, documents
+    return PROJECT, documents  # equal to `project`, checked above
 
 
 def load_stack(
@@ -429,7 +441,8 @@ def load_stack(
     settings = {name: parse_stack(name, doc) for name, doc in documents.items()}
     check_stack_set(settings)
     if engine is not None:
-        check_engine_config(stack, documents[stack]["config"], engine)
+        document = _mapping(documents[stack], f"Stack {stack!r} must be a mapping.")
+        check_engine_config(stack, document["config"], engine)
     return settings[stack]
 
 
@@ -437,11 +450,11 @@ def _same(left: object, right: object) -> bool:
     """Equality that also requires equal types (so True != 1, "1" != 1)."""
     if type(left) is not type(right):
         return False
-    if isinstance(left, dict):
+    if isinstance(left, dict) and isinstance(right, dict):
         return left.keys() == right.keys() and all(
             _same(left[key], right[key]) for key in left
         )
-    if isinstance(left, list):
+    if isinstance(left, list) and isinstance(right, list):
         return len(left) == len(right) and all(map(_same, left, right))
     return left == right
 

@@ -1,8 +1,9 @@
-"""Workflow-shape and repository-hygiene tests (G2.1).
+"""Workflow-shape and repository-hygiene tests (G2.1, extended in G3.2).
 
-Needs PyYAML (a G3.1 dev dependency; tests fail without it) and the
-standard library only; run with ``python3 -m unittest discover -s tests -v``.
-The checks live in ``workflow_checks.py`` and fail closed.
+Needs PyYAML (a G3.1 dev dependency; tests fail without it) and the standard
+library only. ``make test`` and the ``Coverage`` check collect them with
+pytest; ``python3 -m unittest discover -s tests`` also runs them. The checks
+live in ``workflow_checks.py`` and fail closed.
 """
 
 import contextlib
@@ -85,7 +86,9 @@ class FailClosedFixtureTest(unittest.TestCase):
         self.assertViolation(text, "contents")
 
     def test_d_quoted_and_flow_job_lines(self):
-        self.assertViolation(PR_WRITE.replace("  lint:  # trailing comment", '  "lint": '))
+        self.assertViolation(
+            PR_WRITE.replace("  lint:  # trailing comment", '  "lint": ')
+        )
         flow = (
             "on: pull_request\npermissions: {contents: read}\n"
             "jobs: {lint: {runs-on: x, permissions: {contents: write}}}\n"
@@ -130,15 +133,15 @@ class FailClosedFixtureTest(unittest.TestCase):
         text = PR_OK.replace(
             "    runs-on: ubuntu-latest\n",
             "    uses: org/repo/.github/workflows/x.yml@main\n",
-        ).replace(
-            f"    steps:\n      - uses: actions/checkout@{SHA}  # v1\n", ""
-        )
+        ).replace(f"    steps:\n      - uses: actions/checkout@{SHA}  # v1\n", "")
         self.assertViolation(text, "not SHA-pinned")
 
     def test_scalar_permissions_rejected(self):
         for scalar in ("read-all", "write-all"):
             self.assertViolation(
-                PR_OK.replace("permissions:\n  contents: read\n", f"permissions: {scalar}\n"),
+                PR_OK.replace(
+                    "permissions:\n  contents: read\n", f"permissions: {scalar}\n"
+                ),
                 "contents",
             )
 
@@ -198,7 +201,10 @@ class DeliberateBypassFixtureTest(unittest.TestCase):
 
 class CompositeActionTest(unittest.TestCase):
     def test_unpinned_composite_step_rejected(self):
-        text = "runs:\n  using: composite\n  steps:\n    - uses: a/b@v1\n      shell: bash\n"
+        text = (
+            "runs:\n  using: composite\n  steps:\n"
+            "    - uses: a/b@v1\n      shell: bash\n"
+        )
         self.assertTrue(wc.check_action(text))
         self.assertEqual(wc.check_action(text.replace("v1", SHA)), [])
 
@@ -211,27 +217,43 @@ class AutoreleaseFixtureTest(unittest.TestCase):
         self.assertTrue(wc.check_autorelease(text))
 
     def test_tags_filter_rejected(self):
-        self.assertRejected(self.good.replace(
-            "    branches:\n      - main\n",
-            "    branches:\n      - main\n    tags:\n      - 'v*'\n"))
+        self.assertRejected(
+            self.good.replace(
+                "    branches:\n      - main\n",
+                "    branches:\n      - main\n    tags:\n      - 'v*'\n",
+            )
+        )
 
     def test_paths_filter_rejected(self):
-        self.assertRejected(self.good.replace(
-            "    branches:\n      - main\n",
-            "    branches:\n      - main\n    paths:\n      - 'x'\n"))
+        self.assertRejected(
+            self.good.replace(
+                "    branches:\n      - main\n",
+                "    branches:\n      - main\n    paths:\n      - 'x'\n",
+            )
+        )
 
     def test_extra_branch_rejected(self):
-        self.assertRejected(self.good.replace("      - main\n", "      - main\n      - dev\n"))
+        self.assertRejected(
+            self.good.replace("      - main\n", "      - main\n      - dev\n")
+        )
 
     def test_forbidden_commands_rejected(self):
-        for cmd in ("gh api x", "curl http://x", "wget x", "git push origin", "git commit -m x"):
+        for cmd in (
+            "gh api x",
+            "curl http://x",
+            "wget x",
+            "git push origin",
+            "git commit -m x",
+        ):
             self.assertRejected(self.good + f"      - run: {cmd}\n")
 
     def test_unlisted_command_rejected(self):
         self.assertRejected(self.good + "      - run: echo hi\n")
 
     def test_unpinned_or_other_action_rejected(self):
-        self.assertRejected(self.good.replace("@" + self.good.split("checkout@")[1][:40], "@v7"))
+        self.assertRejected(
+            self.good.replace("@" + self.good.split("checkout@")[1][:40], "@v7")
+        )
         self.assertRejected(self.good.replace("actions/checkout@", "evil/other@"))
 
     def test_shell_chaining_rejected(self):
@@ -249,28 +271,48 @@ class AutoreleaseFixtureTest(unittest.TestCase):
 
     def test_extra_step_job_and_top_keys_rejected(self):
         marker = "    runs-on: ubuntu-latest\n"
-        for extra in ("    container: alpine\n", "    services: {a: {image: x}}\n",
-                      "    env: {BASH_ENV: x}\n", "    defaults: {run: {shell: bash}}\n"):
+        for extra in (
+            "    container: alpine\n",
+            "    services: {a: {image: x}}\n",
+            "    env: {BASH_ENV: x}\n",
+            "    defaults: {run: {shell: bash}}\n",
+        ):
             self.assertRejected(self.good.replace(marker, marker + extra))
         step = "        run: python3 scripts/next_release_version.py\n"
-        self.assertRejected(self.good.replace(step, step + "        shell: bash -c 'x'\n"))
-        self.assertRejected(self.good.replace(step, step + "        working-directory: /tmp\n"))
+        self.assertRejected(
+            self.good.replace(step, step + "        shell: bash -c 'x'\n")
+        )
+        self.assertRejected(
+            self.good.replace(step, step + "        working-directory: /tmp\n")
+        )
         self.assertRejected("env:\n  BASH_ENV: x\n" + self.good)
 
     def test_step_env_keys_are_limited(self):
         marker = "          TAG: ${{ steps.version.outputs.tag }}\n"
-        self.assertRejected(self.good.replace(marker, marker + "          BASH_ENV: /x\n"))
+        self.assertRejected(
+            self.good.replace(marker, marker + "          BASH_ENV: /x\n")
+        )
 
     def test_token_only_as_gh_token(self):
         marker = "          TAG: ${{ steps.version.outputs.tag }}\n"
-        self.assertRejected(self.good.replace(marker, "          TAG: ${{ github.token }}\n"))
-        self.assertRejected(self.good.replace(
-            "          persist-credentials: false\n",
-            "          persist-credentials: false\n          token: ${{ github.token }}\n"))
-        self.assertRejected(self.good.replace("GH_TOKEN: ${{ github.token }}", "GH_TOKEN: abc"))
+        self.assertRejected(
+            self.good.replace(marker, "          TAG: ${{ github.token }}\n")
+        )
+        self.assertRejected(
+            self.good.replace(
+                "          persist-credentials: false\n",
+                "          persist-credentials: false\n"
+                "          token: ${{ github.token }}\n",
+            )
+        )
+        self.assertRejected(
+            self.good.replace("GH_TOKEN: ${{ github.token }}", "GH_TOKEN: abc")
+        )
 
     def test_extra_secret_rejected(self):
-        self.assertRejected(self.good + "      - run: gh release create ${{ secrets.X }}\n")
+        self.assertRejected(
+            self.good + "      - run: gh release create ${{ secrets.X }}\n"
+        )
 
 
 class RepositoryGrepTest(unittest.TestCase):
@@ -289,12 +331,18 @@ class RepositoryGrepTest(unittest.TestCase):
             hits = wc.scan_repo(tmp)
         self.assertEqual(
             sorted(hits),
-            [".github/w.yml: aws-secret-access-key",
-             "docs/deep/note.md: VILNACRM_APP_"],
+            [
+                ".github/w.yml: aws-secret-access-key",
+                "docs/deep/note.md: VILNACRM_APP_",
+            ],
         )
 
     def test_removed_files_stay_removed(self):
-        for name in ("tempate-sync-pat.yml", "template-sync-app.yml", "super-linter.yml"):
+        for name in (
+            "tempate-sync-pat.yml",
+            "template-sync-app.yml",
+            "super-linter.yml",
+        ):
             self.assertFalse((WF_DIR / name).exists(), name)
         self.assertFalse((ROOT / "super-linter-output").exists())
         self.assertFalse((ROOT / ".github" / "linters").exists())
@@ -320,9 +368,12 @@ class RepositoryGrepTest(unittest.TestCase):
 def git_env():
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(
-        GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
-        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t.invalid",
-        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t.invalid",
+        GIT_CONFIG_GLOBAL="/dev/null",
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_AUTHOR_NAME="t",
+        GIT_AUTHOR_EMAIL="t@t.invalid",
+        GIT_COMMITTER_NAME="t",
+        GIT_COMMITTER_EMAIL="t@t.invalid",
     )
     return env
 
@@ -333,7 +384,8 @@ def make_repo(tmp, steps):
 
     def git(*args):
         cmd = [GIT, *args]
-        subprocess.run(cmd, cwd=tmp, check=True, env=env, capture_output=True)  # nosec B603
+        opts = {"cwd": tmp, "check": True, "env": env, "capture_output": True}
+        subprocess.run(cmd, **opts)  # nosec B603
 
     git("init", "-q", "-b", "main")
     for kind, *rest in steps:
@@ -352,14 +404,17 @@ class MakeRepoIsolationTest(unittest.TestCase):
     def test_make_repo_raises_on_failing_git_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(subprocess.CalledProcessError):
-                make_repo(tmp, [("commit", "a"), ("git", "checkout", "-q", "no-such-ref")])
+                make_repo(
+                    tmp, [("commit", "a"), ("git", "checkout", "-q", "no-such-ref")]
+                )
 
     def test_commits_use_the_isolated_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
             make_repo(tmp, [("commit", "a")])
             cmd = [GIT, "log", "--format=%ae|%ce"]
             env = git_env()
-            res = subprocess.run(cmd, cwd=tmp, check=True, env=env, capture_output=True, text=True)  # nosec B603
+            opts = {"cwd": tmp, "check": True, "env": env, "text": True}
+            res = subprocess.run(cmd, capture_output=True, **opts)  # nosec B603
             out = res.stdout.strip()
         self.assertEqual(out, "t@t.invalid|t@t.invalid")
 
@@ -373,7 +428,8 @@ class NextReleaseVersionTest(unittest.TestCase):
             out = Path(tmp) / "gh_output"
             env = dict(git_env(), GITHUB_OUTPUT=str(out))
             cmd = [sys.executable, str(self.script)]
-            res = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True)  # nosec B603
+            opts = {"cwd": tmp, "env": env, "capture_output": True, "text": True}
+            res = subprocess.run(cmd, check=False, **opts)  # nosec B603
             self.assertEqual(res.returncode, 0, res.stderr)
             data = dict(line.split("=", 1) for line in out.read_text().split())
         return data
@@ -383,41 +439,63 @@ class NextReleaseVersionTest(unittest.TestCase):
         self.assertEqual((r["skipped"], r["tag"]), ("false", "v0.1.0"))
 
     def test_chore_only_is_skipped(self):
-        r = self.run_helper([("commit", "feat: a"), ("tag", "v0.2.0"),
-                             ("commit", "chore: deps")])
+        r = self.run_helper(
+            [("commit", "feat: a"), ("tag", "v0.2.0"), ("commit", "chore: deps")]
+        )
         self.assertEqual(r["skipped"], "true")
         self.assertEqual(r["previous"], "v0.2.0")
 
     def test_fix_is_patch(self):
-        r = self.run_helper([("commit", "feat: a"), ("tag", "v0.2.0"),
-                             ("commit", "chore: x"), ("commit", "fix(core): y")])
+        r = self.run_helper(
+            [
+                ("commit", "feat: a"),
+                ("tag", "v0.2.0"),
+                ("commit", "chore: x"),
+                ("commit", "fix(core): y"),
+            ]
+        )
         self.assertEqual(r["tag"], "v0.2.1")
 
     def test_breaking_below_one_is_minor(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v0.2.0"),
-                             ("commit", "feat!: drop")])
+        r = self.run_helper(
+            [("commit", "a"), ("tag", "v0.2.0"), ("commit", "feat!: drop")]
+        )
         self.assertEqual(r["tag"], "v0.3.0")
 
     def test_breaking_body_below_one_is_minor(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v0.2.0"),
-                             ("commit", "fix: x\n\nBREAKING CHANGE: gone")])
+        r = self.run_helper(
+            [
+                ("commit", "a"),
+                ("tag", "v0.2.0"),
+                ("commit", "fix: x\n\nBREAKING CHANGE: gone"),
+            ]
+        )
         self.assertEqual(r["tag"], "v0.3.0")
 
     def test_breaking_from_one_is_major(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v1.2.3"),
-                             ("commit", "feat!: drop")])
+        r = self.run_helper(
+            [("commit", "a"), ("tag", "v1.2.3"), ("commit", "feat!: drop")]
+        )
         self.assertEqual(r["tag"], "v2.0.0")
 
     def test_feat_from_one_is_minor(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v1.2.3"),
-                             ("commit", "feat: more")])
+        r = self.run_helper(
+            [("commit", "a"), ("tag", "v1.2.3"), ("commit", "feat: more")]
+        )
         self.assertEqual(r["tag"], "v1.3.0")
 
     def test_non_matching_tags_are_ignored(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v1.2.3"),
-                             ("commit", "b"), ("tag", "v1.0.0-rc1"),
-                             ("tag", "v9.9.9foo"), ("tag", "v1.10.0"),
-                             ("commit", "fix: z")])
+        r = self.run_helper(
+            [
+                ("commit", "a"),
+                ("tag", "v1.2.3"),
+                ("commit", "b"),
+                ("tag", "v1.0.0-rc1"),
+                ("tag", "v9.9.9foo"),
+                ("tag", "v1.10.0"),
+                ("commit", "fix: z"),
+            ]
+        )
         self.assertEqual((r["previous"], r["tag"]), ("v1.10.0", "v1.10.1"))
 
     def test_many_commits_no_sigpipe(self):
@@ -430,34 +508,54 @@ class NextReleaseVersionTest(unittest.TestCase):
         self.assertEqual(r["tag"], "v1.1.0")
         r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"), ("commit", "FIX: x")])
         self.assertEqual(r["tag"], "v1.0.1")
-        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),
-                             ("commit", "fix(scope)!: x")])
+        r = self.run_helper(
+            [("commit", "a"), ("tag", "v1.0.0"), ("commit", "fix(scope)!: x")]
+        )
         self.assertEqual(r["tag"], "v2.0.0")
 
     def test_breaking_change_footer_stays_uppercase(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),
-                             ("commit", "chore: x\n\nbreaking change: no")])
+        r = self.run_helper(
+            [
+                ("commit", "a"),
+                ("tag", "v1.0.0"),
+                ("commit", "chore: x\n\nbreaking change: no"),
+            ]
+        )
         self.assertEqual(r["skipped"], "true")
 
     def test_unreachable_tag_is_ignored(self):
-        r = self.run_helper([
-            ("commit", "feat: base"), ("tag", "v1.0.0"),
-            ("git", "checkout", "-q", "-b", "side"),
-            ("commit", "chore: side"), ("tag", "v5.0.0"),
-            ("git", "checkout", "-q", "main"),
-            ("commit", "fix: on main"),
-        ])
+        r = self.run_helper(
+            [
+                ("commit", "feat: base"),
+                ("tag", "v1.0.0"),
+                ("git", "checkout", "-q", "-b", "side"),
+                ("commit", "chore: side"),
+                ("tag", "v5.0.0"),
+                ("git", "checkout", "-q", "main"),
+                ("commit", "fix: on main"),
+            ]
+        )
         self.assertEqual((r["previous"], r["tag"]), ("v1.0.0", "v1.0.1"))
 
     def test_annotated_tags_are_selected(self):
-        r = self.run_helper([("commit", "a"),
-                             ("git", "tag", "-a", "v1.2.3", "-m", "release"),
-                             ("commit", "feat: z")])
+        r = self.run_helper(
+            [
+                ("commit", "a"),
+                ("git", "tag", "-a", "v1.2.3", "-m", "release"),
+                ("commit", "feat: z"),
+            ]
+        )
         self.assertEqual((r["previous"], r["tag"]), ("v1.2.3", "v1.3.0"))
 
     def test_non_ascii_digit_tag_is_ignored(self):
-        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),
-                             ("tag", "v\u0663.0.0"), ("commit", "fix: z")])
+        r = self.run_helper(
+            [
+                ("commit", "a"),
+                ("tag", "v1.0.0"),
+                ("tag", "v\u0663.0.0"),
+                ("commit", "fix: z"),
+            ]
+        )
         self.assertEqual(r["tag"], "v1.0.1")
 
     def test_main_without_github_output_prints_only(self):

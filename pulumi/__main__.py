@@ -10,9 +10,9 @@ an empty program.
 
 from pathlib import Path
 
-from app.config import ConfigError, engine_config, load_stack
-
 import pulumi
+
+from app.config import ConfigError, engine_config, load_stack
 
 # The engine's config view must equal the checked stack file (G31-F01).
 settings = load_stack(

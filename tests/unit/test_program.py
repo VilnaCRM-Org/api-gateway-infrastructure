@@ -12,7 +12,9 @@ import json
 import runpy
 from pathlib import Path
 
+import pulumi
 import pytest
+
 from app import config
 from app.config import ConfigError
 from stack_fixtures import (
@@ -23,8 +25,6 @@ from stack_fixtures import (
     engine_view,
     key,
 )
-
-import pulumi
 
 
 class RecordingMocks(pulumi.runtime.Mocks):
@@ -221,10 +221,11 @@ def test_engine_value_encoding(file_value, engine_value, same: bool) -> None:
 def test_ci_provider_uses_dummy_keys_and_skip_flags(documents) -> None:
     documents["ci"] = ci_document(documents)
     settings = config.parse_stack("ci", documents["ci"])
+    dummy = "pulumi-preview"  # the non-secret offline-stack value, pinned literally
     assert config.provider_args(settings) == {
         "region": settings.region,
-        "access_key": "pulumi-preview",
-        "secret_key": "pulumi-preview",
+        "access_key": dummy,
+        "secret_key": dummy,
         "skip_credentials_validation": True,
         "skip_metadata_api_check": True,
         "skip_requesting_account_id": True,

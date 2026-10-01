@@ -1,0 +1,8 @@
+# G3.2 `Zizmor` (AD-A11). FR-A08: every action is pinned by full commit SHA,
+# including actions/* and github/*, which zizmor's default policy would let
+# use a tag.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": hash-pin
