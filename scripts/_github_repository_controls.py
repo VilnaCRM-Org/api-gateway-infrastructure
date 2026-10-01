@@ -404,7 +404,7 @@ def variable_blockers(
     return blockers
 
 
-def secret_blockers(name: str, count: int | None) -> list[str]:
+def entry_count_blockers(name: str, count: int | None) -> list[str]:
     """D-A10 and NFR-A01: no environment holds any secret.
 
     Takes a count, never names, so the report cannot echo a secret name.
@@ -424,22 +424,22 @@ def readback_blockers(
     """Diff a full readback (ruleset, environments, variables) against the plan."""
     environments = readback.get("environments")
     actual_variables = readback.get("variables")
-    secrets = readback.get("secrets")
+    entry_counts = readback.get("secrets")
     if (
         not isinstance(environments, Mapping)
         or not isinstance(actual_variables, Mapping)
-        or not isinstance(secrets, Mapping)
+        or not isinstance(entry_counts, Mapping)
     ):
         return ["Readback must hold environments, variables and secrets objects."]
     blockers = ruleset_blockers(readback.get("ruleset"))
     for name in ENVIRONMENTS:
         blockers += environment_blockers(name, environments.get(name), reviewer_id)
         blockers += variable_blockers(name, variables[name], actual_variables.get(name))
-        blockers += secret_blockers(name, secrets.get(name))
+        blockers += entry_count_blockers(name, entry_counts.get(name))
     blockers += [
         f"Readback holds the unexpected environment {name}."
         for name in sorted(
-            {*environments, *actual_variables, *secrets} - set(ENVIRONMENTS)
+            {*environments, *actual_variables, *entry_counts} - set(ENVIRONMENTS)
         )
     ]
     return blockers
