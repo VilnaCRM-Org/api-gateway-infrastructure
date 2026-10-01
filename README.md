@@ -54,12 +54,13 @@ The `ci` stack runs the credential-free Structural Preview on a local file backe
 
 ### Program guardrails and G3.x hand-offs
 
-`pulumi/app/config.py` also refuses a `Pulumi.yaml` with anything beyond `name`, `description` and `runtime: python` (no `main`, `stackConfigDir`, project `config:` or runtime options); every stack sets `pulumi:disable-default-providers: ["*"]`; only the literal YAML booleans `true`/`false` count as booleans; and `pulumi/__main__.py` fails unless the engine's config (`PULUMI_CONFIG`) equals the checked stack file, which also refuses `--config-file` and per-key `PULUMI_CONFIG_<KEY>` overrides.
+`pulumi/app/config.py` also refuses a `Pulumi.yaml` with anything beyond `name`, `description` and `runtime: python` (no `main`, `stackConfigDir`, project `config:` or runtime options); every stack sets `pulumi:disable-default-providers: ["*"]`; only the literal YAML booleans `true`/`false` count as booleans; and `pulumi/__main__.py` fails unless the engine's config (`PULUMI_CONFIG`) equals the checked stack file's `config:` mapping. That refuses per-key `PULUMI_CONFIG_<KEY>` overrides and a `--config-file` whose config differs; it does not see a `--config-file` that changes only the top-level `secretsprovider`, `encryptionsalt` or `encryptedkey`, nor the backend in use (hand-off F09).
 
 Recorded hand-offs from the G3.1 gate (attempt 1):
 
 - **F02 (before G3.3 / G4.1):** install the `aws` resource plugin 7.23.0 in the image from a pinned URL with a verified SHA-256, so previews never download an unpinned plugin.
-- **F06:** recorded by ID from the G3.1 gate report; carry its text from that report.
+- **F06 (G3.4):** `test` and `prod` set `skip_metadata_api_check=False` (IMDS credential fallback, as USI does); harmless on GitHub-hosted runners, where the account pin still applies; reconsider if self-hosted EC2 runners are ever used.
+- **F09 (G3.4):** workflows never pass `--config`, `--config-file` or `--secrets-provider`, and preflight checks that `PULUMI_BACKEND_URL` equals the stack's `pulumiBackendUrl` and that the stack's secrets provider equals `pulumiSecretsProvider`.
 - **F07 (G3.2):** extend the 100% branch-coverage gate to `scripts/` and `policy/`, and replace the Poetry-era `pulumi/.flake8` and `pulumi/.pre-commit-config.yaml` with the G3.2 battery.
 
 ## Documentation
