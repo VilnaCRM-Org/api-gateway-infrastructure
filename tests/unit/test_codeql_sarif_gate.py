@@ -69,6 +69,73 @@ def test_partial_location_is_described() -> None:
     assert gate.describe(result) == "?:?: r: "
 
 
+def at(uri: str, line: int, text: str | None = None) -> dict:
+    location: dict = {
+        "physicalLocation": {
+            "artifactLocation": {"uri": uri},
+            "region": {"startLine": line},
+        }
+    }
+    if text is not None:
+        location["message"] = {"text": text}
+    return location
+
+
+def test_taint_sources_are_printed() -> None:
+    result = dict(
+        RESULT,
+        relatedLocations=[at("scripts/a.py", 3, "sensitive data (secret)"), at("b", 4)],
+        codeFlows=[
+            {
+                "threadFlows": [
+                    {
+                        "locations": [
+                            {"location": at("scripts/a.py", 3, "call to f()")},
+                            {"location": at("scripts/x.py", 7, "sink")},
+                        ]
+                    }
+                ]
+            }
+        ],
+    )
+    assert gate.describe(result) == (
+        "scripts/x.py:7: py/clear-text-logging: logs a secret"
+        " [related: scripts/a.py:3: sensitive data (secret)]"
+        " [flow source: scripts/a.py:3: call to f()]"
+    )
+
+
+def test_a_source_without_a_message_prints_its_place() -> None:
+    result = dict(
+        RESULT,
+        relatedLocations=[at("a.py", 1)],
+        codeFlows=[{"threadFlows": [{"locations": [{"location": at("b.py", 2)}]}]}],
+    )
+    assert gate.describe(result).endswith(" [related: a.py:1] [flow source: b.py:2]")
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"relatedLocations": []},
+        {"relatedLocations": ["x"], "codeFlows": ["x"]},
+        {"codeFlows": [{"threadFlows": []}]},
+        {"codeFlows": [{"threadFlows": [{"locations": [{"location": []}]}]}]},
+        {"codeFlows": [{"threadFlows": [{"locations": ["x"]}]}]},
+    ],
+)
+def test_missing_or_malformed_sources_are_skipped(extra: dict) -> None:
+    assert gate.describe(dict(RESULT, **extra)) == (
+        "scripts/x.py:7: py/clear-text-logging: logs a secret"
+    )
+
+
+def test_sources_reach_the_gate_output(tmp_path: Path, capsys) -> None:
+    result = dict(RESULT, relatedLocations=[at("scripts/a.py", 3, "src")])
+    assert gate.main([str(sarif(tmp_path / "out", [result]))]) == 1
+    assert "[related: scripts/a.py:3: src]" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     "content",
     [
