@@ -48,7 +48,9 @@ test-lockfile   Fail when pyproject.toml and uv.lock disagree.
 up              Start the development container.
 ```
 
-The Python toolchain is [uv](https://docs.astral.sh/uv/) with the frozen, hash-pinned `uv.lock` at the repository root (Python 3.11, `pulumi-aws` 7.23.0). The Pulumi program lives in `pulumi/`; its stacks are `test` and `prod` (the offline `ci` stack of AD-A15 follows), and `pulumi/app/config.py` refuses any stack config outside that closed shape.
+The Python toolchain is [uv](https://docs.astral.sh/uv/) with the frozen, hash-pinned `uv.lock` at the repository root (Python 3.11, `pulumi-aws` 7.23.0). The Pulumi program lives in `pulumi/`; its stacks are `test`, `prod` and the offline `ci` stack (AD-A15), and `pulumi/app/config.py` refuses any stack config outside that closed shape.
+
+The `ci` stack runs the credential-free Structural Preview on a local file backend. It uses the `passphrase` secrets provider with an **intentionally empty, non-secret passphrase** (`PULUMI_CONFIG_PASSPHRASE=""`, as USI's `dev` stack does), and it holds no secret. Its account is the AWS documentation example account `123456789012`, never a real VilnaCRM account. `test` and `prod` refuse a passphrase provider and pin their own account, region, S3 backend and KMS key.
 
 ## Documentation
 Start reading at the [GitHub wiki](https://github.com/VilnaCRM-Org/infrastructure-template/wiki). If you're having trouble, head for [the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting) as it's frequently updated.
