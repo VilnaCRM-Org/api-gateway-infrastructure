@@ -74,7 +74,9 @@ def _names(env: str) -> dict:
         "iam": iam,
         "state": f"arn:aws:s3:::{state}",
         "replica": f"arn:aws:s3:::{replica_bucket(state)}",
-        "ci_roles": [f"{iam}role/GitHubCi{x}-{P}-{env}" for x in ("Apply", "Drift", "Preview")],
+        "ci_roles": [
+            f"{iam}role/GitHubCi{x}-{P}-{env}" for x in ("Apply", "Drift", "Preview")
+        ],
         "repl_role": f"{iam}role/PulumiStateRepl-{P}-{env}",
         "log_role": f"{iam}role/ApiGatewayCloudWatchLogs-{env}",
         "apply_policies": [
@@ -92,9 +94,14 @@ def dedicated_apply_statements(env: str, catalog: dict) -> list[dict]:
     """Ceiling and identity share these statements."""
     acct = ACCOUNTS[env]
     st = catalog["statements"]
-    usi = {_first(st[k]): st[k] for k in _policy_ids(catalog, "ceiling/GitHubGovernanceApply")}
+    usi = {
+        _first(st[k]): st[k]
+        for k in _policy_ids(catalog, "ceiling/GitHubGovernanceApply")
+    }
     n = _names(env)
-    base = f"arn:aws:s3:::pulumi-bootstrap-infrastructure-{env}-state/governance/.pulumi"
+    base = (
+        f"arn:aws:s3:::pulumi-bootstrap-infrastructure-{env}-state/governance/.pulumi"
+    )
     stack = f"{env}-{P}"
     generic = copy.deepcopy(usi["access-analyzer:ValidatePolicy"])
     generic["Action"] = [a for a in generic["Action"] if a not in ROLE_WRITES]
@@ -148,27 +155,57 @@ def dedicated_apply_statements(env: str, catalog: dict) -> list[dict]:
             ],
         },
         {
-            "Action": ["iam:AttachRolePolicy", "iam:DeleteRolePolicy", "iam:DetachRolePolicy", "iam:PutRolePolicy"],
-            "Condition": {"StringEquals": {"iam:PermissionsBoundary": n["boundaries"][0]}},
+            "Action": [
+                "iam:AttachRolePolicy",
+                "iam:DeleteRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:PutRolePolicy",
+            ],
+            "Condition": {
+                "StringEquals": {"iam:PermissionsBoundary": n["boundaries"][0]}
+            },
             "Effect": "Allow",
             "Resource": n["ci_roles"],
         },
         {
             "Action": ["iam:DeleteRolePolicy", "iam:PutRolePolicy"],
-            "Condition": {"StringEquals": {"iam:PermissionsBoundary": n["boundaries"][1]}},
+            "Condition": {
+                "StringEquals": {"iam:PermissionsBoundary": n["boundaries"][1]}
+            },
             "Effect": "Allow",
             "Resource": n["repl_role"],
         },
-        {"Action": "iam:PassRole", "Condition": {"StringEquals": {"iam:PassedToService": "s3.amazonaws.com"}}, "Effect": "Allow", "Resource": n["repl_role"]},
-        {"Action": "iam:PassRole", "Condition": {"StringEquals": {"iam:PassedToService": "apigateway.amazonaws.com"}}, "Effect": "Allow", "Resource": n["log_role"]},
-        {"Action": ["apigateway:GET", "apigateway:PATCH"], "Effect": "Allow", "Resource": "arn:aws:apigateway:eu-central-1::/account"},
+        {
+            "Action": "iam:PassRole",
+            "Condition": {"StringEquals": {"iam:PassedToService": "s3.amazonaws.com"}},
+            "Effect": "Allow",
+            "Resource": n["repl_role"],
+        },
+        {
+            "Action": "iam:PassRole",
+            "Condition": {
+                "StringEquals": {"iam:PassedToService": "apigateway.amazonaws.com"}
+            },
+            "Effect": "Allow",
+            "Resource": n["log_role"],
+        },
+        {
+            "Action": ["apigateway:GET", "apigateway:PATCH"],
+            "Effect": "Allow",
+            "Resource": "arn:aws:apigateway:eu-central-1::/account",
+        },
         # D-A12: no logs:PutResourcePolicy on "*" for any CI or governance role.
         # Branch A: nothing here; the human seed operator writes the
         # account-scoped WAF-log policy. Branch B adds branch_b_statements().
         copy.deepcopy(usi["s3:GetBucketLocation"]),
         copy.deepcopy(usi["s3:ListBucket"]),
         {
-            "Action": ["s3:DeleteObject", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"],
+            "Action": [
+                "s3:DeleteObject",
+                "s3:GetObject",
+                "s3:GetObjectVersion",
+                "s3:PutObject",
+            ],
             "Effect": "Allow",
             # Exact stack paths, following the BI operator bindings layout
             # (stacks/<project>/<stack>.{json,json.bak,pulumi-tags}, history|backups/<project>/<stack>/,
@@ -185,7 +222,14 @@ def dedicated_apply_statements(env: str, catalog: dict) -> list[dict]:
         # authenticated DescribeKey of alias/pulumi-platform-bootstrap-{env});
         # placeholder of the real length here.
         {
-            "Action": ["kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey", "kms:ReEncryptFrom", "kms:ReEncryptTo"],
+            "Action": [
+                "kms:Decrypt",
+                "kms:DescribeKey",
+                "kms:Encrypt",
+                "kms:GenerateDataKey",
+                "kms:ReEncryptFrom",
+                "kms:ReEncryptTo",
+            ],
             "Effect": "Allow",
             "Resource": f"arn:aws:kms:eu-central-1:{acct}:key/00000000-0000-0000-0000-000000000000",
         },
@@ -231,18 +275,32 @@ def dedicated_guard(env: str, catalog: dict) -> dict:
             "Effect": "Deny",
             "NotResource": sorted(
                 [f"{n['iam']}oidc-provider/token.actions.githubusercontent.com"]
-                + n["apply_policies"] + n["boundaries"] + roles
+                + n["apply_policies"]
+                + n["boundaries"]
+                + roles
             ),
         },
         {
-            "Action": ["iam:CreatePolicy", "iam:CreatePolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion", "iam:TagPolicy", "iam:UntagPolicy"],
+            "Action": [
+                "iam:CreatePolicy",
+                "iam:CreatePolicyVersion",
+                "iam:DeletePolicy",
+                "iam:DeletePolicyVersion",
+                "iam:SetDefaultPolicyVersion",
+                "iam:TagPolicy",
+                "iam:UntagPolicy",
+            ],
             "Effect": "Deny",
             "NotResource": n["apply_policies"],
         },
         # Trust, role and tag updates on the five gateway roles (455fe8d0 pattern).
         {"Action": sorted(ROLE_WRITES), "Effect": "Deny", "Resource": roles},
         # Managed attachments only on the CI Apply role (round-2 L4).
-        {"Action": "iam:AttachRolePolicy", "Effect": "Deny", "Resource": [r for r in roles if r != n["ci_roles"][0]]},
+        {
+            "Action": "iam:AttachRolePolicy",
+            "Effect": "Deny",
+            "Resource": [r for r in roles if r != n["ci_roles"][0]],
+        },
         # Attach/detach only the four fixed Apply-role policies.
         {
             "Action": ["iam:AttachRolePolicy", "iam:DetachRolePolicy"],
@@ -251,12 +309,18 @@ def dedicated_guard(env: str, catalog: dict) -> dict:
             "Resource": "*",
         },
         # No inline policy on the CI Apply role or the logging role.
-        {"Action": ["iam:DeleteRolePolicy", "iam:PutRolePolicy"], "Effect": "Deny", "Resource": [n["ci_roles"][0], n["log_role"]]},
+        {
+            "Action": ["iam:DeleteRolePolicy", "iam:PutRolePolicy"],
+            "Effect": "Deny",
+            "Resource": [n["ci_roles"][0], n["log_role"]],
+        },
     ]
     return {"Version": "2012-10-17", "Statement": statements}
 
 
-def merged_shared_ceiling(env: str, catalog: dict, name: str, branch: str = "A") -> tuple[dict, list[str]]:
+def merged_shared_ceiling(
+    env: str, catalog: dict, name: str, branch: str = "A"
+) -> tuple[dict, list[str]]:
     """In-place merge into Preview/Drift-only statements; KMS read separate."""
     st = catalog["statements"]
     n = _names(env)
@@ -280,13 +344,32 @@ def merged_shared_ceiling(env: str, catalog: dict, name: str, branch: str = "A")
                 continue
             touched.append(k[:8])
         out.append(s)
-    out.append({
-        "Action": ["kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"],
-        "Condition": {"StringEquals": {"aws:ResourceTag/Environment": env, "aws:ResourceTag/Purpose": PURPOSES, "aws:ResourceTag/Repository": P}},
-        "Effect": "Allow",
-        "Resource": f"arn:aws:kms:eu-central-1:{ACCOUNTS[env]}:key/*",
-    })
-    out.append({"Action": "apigateway:GET", "Effect": "Allow", "Resource": "arn:aws:apigateway:eu-central-1::/account"})
+    out.append(
+        {
+            "Action": [
+                "kms:DescribeKey",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus",
+                "kms:ListResourceTags",
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:ResourceTag/Environment": env,
+                    "aws:ResourceTag/Purpose": PURPOSES,
+                    "aws:ResourceTag/Repository": P,
+                }
+            },
+            "Effect": "Allow",
+            "Resource": f"arn:aws:kms:eu-central-1:{ACCOUNTS[env]}:key/*",
+        }
+    )
+    out.append(
+        {
+            "Action": "apigateway:GET",
+            "Effect": "Allow",
+            "Resource": "arn:aws:apigateway:eu-central-1::/account",
+        }
+    )
     return {"Version": "2012-10-17", "Statement": out}, touched
 
 
@@ -296,8 +379,14 @@ def main() -> None:
         catalog = json.load(open(f"seed/catalogs/{env}.json", encoding="utf-8"))
         statements = dedicated_apply_statements(env, catalog)
         docs = {
-            "dedicated-apply-ceiling-A": {"Version": "2012-10-17", "Statement": statements},
-            "dedicated-apply-ceiling-B": {"Version": "2012-10-17", "Statement": statements + branch_b_statements(env)},
+            "dedicated-apply-ceiling-A": {
+                "Version": "2012-10-17",
+                "Statement": statements,
+            },
+            "dedicated-apply-ceiling-B": {
+                "Version": "2012-10-17",
+                "Statement": statements + branch_b_statements(env),
+            },
             "dedicated-apply-guard": dedicated_guard(env, catalog),
         }
         print(env, "replica", replica_bucket(f"pulumi-{P}-{env}-state"))
@@ -305,10 +394,25 @@ def main() -> None:
             print(env, key, len(canonical_json(doc)))
         print(env, "dedicated-apply-identity = ceiling (same statements, per branch)")
         for name in ("C-GitHubGovernancePreview", "C-GitHubGovernanceDrift"):
-            before = {"Version": "2012-10-17", "Statement": [catalog["statements"][k] for k in _policy_ids(catalog, f"ceiling/{name}")]}
+            before = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    catalog["statements"][k]
+                    for k in _policy_ids(catalog, f"ceiling/{name}")
+                ],
+            }
             for branch in ("A", "B"):
                 after, touched = merged_shared_ceiling(env, catalog, name, branch)
-                print(env, name, branch, len(canonical_json(before)), "->", len(canonical_json(after)), "in-place:", ",".join(touched))
+                print(
+                    env,
+                    name,
+                    branch,
+                    len(canonical_json(before)),
+                    "->",
+                    len(canonical_json(after)),
+                    "in-place:",
+                    ",".join(touched),
+                )
         if out_dir:
             for key, doc in docs.items():
                 with open(f"{out_dir}/{key}-{env}.json", "w", encoding="utf-8") as fh:
