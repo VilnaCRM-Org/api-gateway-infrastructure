@@ -7,7 +7,7 @@ branch: feat/gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a (origin/main)
 date: 2026-10-01
 status: planning-only
-revision: 6 (2026-10-01: readiness round 1 and 2 corrections)
+revision: 7 (2026-10-01: readiness round 1-3 corrections)
 ---
 
 # Technical research: the API gateway Well-Architected track
@@ -456,7 +456,7 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
 | K-3 | Seed amendments for the gateway change `CATALOG_HASHES` and collide with the USI plan's one-open seed serialization (USI C-BI rows 8-50). | XP-A4: the BI owner gives each gateway seed operation a slot in the same queue. |
 | K-4 | The gateway TEST certificate gates USI XP-10 → XP-11 (USI row 42) → gate 1 (row 43). A slow gateway enrolment delays USI gate 1. | The certificate path (rows 1-11 and 15) is scheduled first; rows 16-17 are not needed before USI row 42 (AD-A12). |
 | K-5 | The VPC link goes `INACTIVE` after 60 idle days (GA-2), so a quiet TEST front door fails cold. | The scheduled drift job also sends one HTTPS probe through the custom domain (FR-A13); the runbook names the recovery time. |
-| K-6 | `AmazonAPIGatewayPushToCloudWatchLogs` grants CloudWatch Logs writes on `*`, and `cloudWatchRoleArn` is account-wide (GA-4). | AD-A9: a BI-owned role with a policy scoped to the gateway log groups, set by the BI prerequisites stack; XP-A12 reads the current value first. |
+| K-6 | `AmazonAPIGatewayPushToCloudWatchLogs` grants CloudWatch Logs writes on `*`, and `cloudWatchRoleArn` is account-wide (GA-4). | AD-A9: a BI-owned role with a policy scoped to the gateway log groups, registered through the D-A1 seed amendment, with the `cloudWatchRoleArn` setting written by governance (D-A9); XP-A12 reads the current value first. |
 | K-7 | WAF log delivery may need `logs:PutResourcePolicy` on `*` (GA-9). | D-A5, V-A6. |
 | K-8 | The TEST zone is shared with USI's DKIM records (GR-14). The gateway's `_*.{fqdn}` pattern does not match them, but a later pattern could. | AD-A8: an explicit deny on `*._domainkey.*` names for the gateway roles, as defence in depth. |
 | K-9 | The USI descriptor is written for an HTTP API (GR-6). | AD-A3: the gateway consumes only the coordinates and checks `request_parameters` as an opaque v1 constant; the REST mapping is the gateway's own. The wording fix is a USI follow-up (USI-F1, outside this plan). |
@@ -468,4 +468,4 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
 | K-15 | The seed registry hard-codes its principal counts and treats `existing: false` as an operator executor (BI `pulumi/seed/policy_registry.py` lines 355, 431-446, 505-514, 570-590). | AD-A1: the seed creates the gateway principals as a new seed-created service kind and registers them, with inventory, installer and verifier changes in G1.1 (GR-18, GR-19; V-A10). |
 | K-16 | For new runtime roles, the BI owner chose a separate CloudFormation stack, not an extension of the seed inventory (GR-19). The BI owner may decline the inventory extension that D-A1 needs. | V-A10: the BI owner reverses origin/main's documented rule and confirms the extension shape before any G1.1 code (a STOP). If it is declined, the story STOPs and goes back to the user. There is no silent fallback to an independent stack. |
 | K-17 | Governance cannot write any gateway IAM resource or create the gateway's S3, KMS and account-level resources. Its guard (`8c068aaa…`, `5366ec11…`) and its USI-scoped seed ceilings (`ceiling/GitHubGovernanceApply` `7a36d2ff…`, `a392c269…`, `00257170…`, `abfe3f39…`; `C-GitHubGovernancePreview`/`-Drift`) both block it, and the operator executor guards (`0c5eed92…`, `c18540fb…`, `408cdbf9…` in TEST) close the governance policy names to the USI ones. So the gateway's grants and non-role BI resources need an owner that the USI pattern does not give (GR-12, GR-18). | D-A9, re-scoped by D-A11: the gateway's governance apply runs under a dedicated seed-created role; only the shared Preview/Drift ceilings, the operator bindings and the five operator guards are amended (AD-A1). |
-| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | Resolved by D-A11: a dedicated governance Apply role with its own ceiling (measured 5905, or 6065 under D-A12 branch B, in revision 6); USI's ceiling untouched; V-A12. |
+| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | Resolved by D-A11: a dedicated governance Apply role with its own ceiling (measured 5830, or 6065 under D-A12 branch B, in revision 7); USI's ceiling untouched; V-A12. |

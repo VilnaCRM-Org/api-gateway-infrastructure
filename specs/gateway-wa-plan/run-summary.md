@@ -11,7 +11,7 @@ This file is the execution ledger. It is not a planning input.
 | Worktree | wt-agi-plan |
 | Branch | feat/gateway-wa-plan |
 | Source baseline | f056c8b32c64e502101ec573191d8f229881bc7a (origin/main) |
-| Bundle revision | 6 (readiness round 2 at `7ed5397`: FAIL, no major; N1-N6/L1-L12 resolved; D-A12, D-A13, D-A14; revisions 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`, 4 `3913ccb`, 5 `7ed5397`) |
+| Bundle revision | 7 (readiness round 3 at `854b7c4`: FAIL, 1 medium; all resolved; revisions 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`, 4 `3913ccb`, 5 `7ed5397`, 6 `854b7c4`) |
 | Specs directory | `specs/gateway-wa-plan/` |
 | Target | pulumi (Python Pulumi), stacks test and prod |
 | Environment | none selected; planning is offline |
@@ -122,20 +122,26 @@ This file is the execution ledger. It is not a planning input.
   the governance runbook needs only a catalog entry; GR-12 shows the seed
   guards block it).
 
-## Artifacts (sha256, revision 6)
+## Artifacts (sha256, revision 7)
 
 `run-summary.md` is not hashed here, because it contains the hashes. Check
 with `sha256sum -c` over the block below, from `specs/gateway-wa-plan/`.
 
 ```
-07c570101c707515a195c218e072398ded6720a3d36c68f3711608b388136d85  research.md
-fe17c6426c8e9cc1c719338bb86ede05da7bee28fd81ec215a68b148f105989c  brief.md
-1c7b3e13e241c647f707c9204d0c7cc875b2a944f13aac7d8987ea77302c0473  prd.md
-1e5f8cef714bacdd2e4fb41692d74cfe692fc04f84cae7b7e5c99017681a9113  architecture.md
-0cb8dbe658834f57c35d1474929d7ea2c4247171c2b6db8a74fc0d5b8b6ce3cc  epics-stories.md
-e860d0293ed9bce864ac8e62527a2c79003cd9df145acf6bb51f675d0431e164  decisions.md
-af6e14590300dd860a69dc641b998a79bbb5bab0c0cd7ff61a05579460084f27  readiness.md
-81d771267a0b10e15c843be2e4a801acab24a899dd67a3097811cc3b476f9f72  evidence/render_governance_sizes.py
+0bc790329ea0fed7a5c589b8ef1b7620a3ea15147770175d027cc151c62bdc0f  research.md
+59bae6dc64b34443eef2b8c828a66601de4bf8f748040e92b601e84f907ff21e  brief.md
+8824bb1646eb965fa7b600929cc497606a617b51fbaf4d19bc6a30379c70fc4f  prd.md
+43b8675dfd28137d3c246089243c7ee06c95fd917a35e5c1333eb90db85acdb1  architecture.md
+ad7d8f0d721f76c6a2f59c250e3f5294835e668c57c37480d9f4cc6ca70f4eb3  epics-stories.md
+e0ede4b8b5935a2a5860fe6eb600352623a5b98824334ad2df8bcdeb6cf817b1  decisions.md
+32b7de7cbebf45a9ba361732c3bd870db9f0bbe73691bcdd64412e16c9700d8c  readiness.md
+b9c064559f2a04e8debce84a168ae274ca10c594dbc7911e678604b3e3ff6089  evidence/render_governance_sizes.py
+03f155c8ed6ff3f5c4d6d3c153de3435c55a9260464ebcde3bf66cb228ffbed7  evidence/dedicated-apply-ceiling-A-prod.json
+9d3d9561e3da26d421654c973ab4127bfeb170da37729c4f7b0ee6b29b596e52  evidence/dedicated-apply-ceiling-A-test.json
+ad4d9df5c8cd7bd58e5e0a9fa980c7752b0e014f2f4321fb3d7af744b2e00de8  evidence/dedicated-apply-ceiling-B-prod.json
+299f0e0428324ffb9e2fce43226c3218178a6877980cde04e65d4642ca9f8867  evidence/dedicated-apply-ceiling-B-test.json
+337e0550335935e3ddbca22132f9743cc7ae8d7d6d6f07668beb7926172de514  evidence/dedicated-apply-guard-prod.json
+5f0048591328484f2b37d8eb1810f9bd8dca747817b4b038128e5f78563a6cd8  evidence/dedicated-apply-guard-test.json
 ```
 
 ## Gates
@@ -156,6 +162,9 @@ af6e14590300dd860a69dc641b998a79bbb5bab0c0cd7ff61a05579460084f27  readiness.md
 | Independent readiness round 2 (on `7ed5397`) | FAIL: no major, 6 medium, 12 low; user decisions D-A12, D-A13 and acknowledgement D-A14; resolved in revision 6 |
 | Revision 6 pre-commit audit (`claude-router:audit`) | REFUTED narrowly: 2 P2, 3 P3, 5 P4; all folded in |
 | Revision 6 recheck | REFUTED narrowly: 5 of 6 fixed, #2 partly; new N1 (P3, init session policy), N2 (P4); folded in; no third round |
+| Independent readiness round 3 (on `854b7c4`) | FAIL: 1 medium (branch-B forward dependency), 5 low, 5 nits; resolved in revision 7 |
+| Revision 7 audit (`claude-router:audit`) | REFUTED narrowly: 3 P3, 3 P4; all folded in |
+| Revision 7 recheck | REFUTED narrowly: 5 of 6 fixed, #1 partly; new N1 (P3, contingency delete), N2 (P4), 2 nits; all folded in; no third round |
 | Independent readiness round | not run yet |
 
 ## Report summary
@@ -177,7 +186,7 @@ af6e14590300dd860a69dc641b998a79bbb5bab0c0cd7ff61a05579460084f27  readiness.md
     `user.vilnacrm.com`);
   - E-G5 TEST front door (G5.1-G5.6);
   - E-G6 PROD front door (G6.1-G6.3).
-- **Ordered list:** 33 rows (0-32), no forward dependency. Revision 1's
+- **Ordered list:** 36 rows (0-32 with 21a and 31a-31c, revision 7), no forward dependency under either D-A12 branch. Revision 1's
   OQ-8 (a)-only rows 26-28 are removed.
 - **External preconditions:** XP-A1…XP-A14 (gateway-local namespace).
   XP-A1 is now the human seed operator; XP-A11 is resolved to "the zone
@@ -185,6 +194,7 @@ af6e14590300dd860a69dc641b998a79bbb5bab0c0cd7ff61a05579460084f27  readiness.md
 - **Open user questions:** none. Cross-plan requests to USI: CR-A1 and CR-A2.
 - **Counts per environment:** 30 principals, 9 seed-created, 67 seed
   policies. Measured sizes (`evidence/render_governance_sizes.py`):
-  dedicated governance Apply ceiling and identity 5905 (D-A12 branch A) /
+  dedicated governance Apply ceiling and identity 5830 (D-A12 branch A) /
   6065 (branch B), its guard 5565, shared Preview/Drift ceilings
-  5419/5429 (TEST/PROD), all ≤ 6144 (revision 6).
+  5387/5397 (branch A) or 5419/5429 (branch B) (TEST/PROD), all ≤ 6144
+  (revision 7).

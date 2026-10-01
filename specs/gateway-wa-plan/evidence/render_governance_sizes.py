@@ -12,9 +12,13 @@ canonical JSON lengths against the 6144-character managed-policy limit. The
 replica bucket names are the deterministic names of BI
 `pulumi/infra/pulumi_state.py` `_replica_bucket_name` (lines 267-275).
 Names marked "planning" are fixed exactly in G1.1. No AWS call is made.
-Revision 6: no logs:PutResourcePolicy on "*" (D-A12; branch B renders the
-scoped form), exact stack paths, the governance secrets key by exact ARN,
-and a guard deny of managed attachments outside the CI Apply role.
+Revision 6: no logs:PutResourcePolicy on "*" (D-A12), exact stack paths,
+the governance secrets key by exact ARN, and a guard deny of managed
+attachments outside the CI Apply role. Revision 7: branch A carries no
+logs: statement at all; branch B adds the resource-scoped put and the
+describe read. With an output directory argument it also writes the
+rendered TEST/PROD documents, which G1.1 pins instead of re-deriving the
+copied USI action lists live.
 """
 
 from __future__ import annotations
@@ -159,10 +163,8 @@ def dedicated_apply_statements(env: str, catalog: dict) -> list[dict]:
         {"Action": "iam:PassRole", "Condition": {"StringEquals": {"iam:PassedToService": "apigateway.amazonaws.com"}}, "Effect": "Allow", "Resource": n["log_role"]},
         {"Action": ["apigateway:GET", "apigateway:PATCH"], "Effect": "Allow", "Resource": "arn:aws:apigateway:eu-central-1::/account"},
         # D-A12: no logs:PutResourcePolicy on "*" for any CI or governance role.
-        # Branch A (default): only the read; the human seed operator writes the
-        # WAF-log resource policy. Branch B (V-A8 finds a scoped form) adds
-        # PUT_SCOPED below.
-        {"Action": "logs:DescribeResourcePolicies", "Effect": "Allow", "Resource": "*"},
+        # Branch A: nothing here; the human seed operator writes the
+        # account-scoped WAF-log policy. Branch B adds branch_b_statements().
         copy.deepcopy(usi["s3:GetBucketLocation"]),
         copy.deepcopy(usi["s3:ListBucket"]),
         {
@@ -190,13 +192,18 @@ def dedicated_apply_statements(env: str, catalog: dict) -> list[dict]:
     ]
 
 
-def put_scoped(env: str) -> dict:
-    """Branch B only: the V-A8 scoped form, one exact log-group ARN."""
-    return {
-        "Action": "logs:PutResourcePolicy",
-        "Effect": "Allow",
-        "Resource": f"arn:aws:logs:eu-central-1:{ACCOUNTS[env]}:log-group:aws-waf-logs-{P}-{env}",
-    }
+def branch_b_statements(env: str) -> list[dict]:
+    """Branch B only: a resource-scoped policy on the exact WAF log group
+    (pulumi_aws 7.23.0 cloudwatch.LogResourcePolicy resource_arn), plus the
+    read the governance refresh needs (no resource-level support, V-A8)."""
+    return [
+        {
+            "Action": "logs:PutResourcePolicy",
+            "Effect": "Allow",
+            "Resource": f"arn:aws:logs:eu-central-1:{ACCOUNTS[env]}:log-group:aws-waf-logs-{P}-{env}",
+        },
+        {"Action": "logs:DescribeResourcePolicies", "Effect": "Allow", "Resource": "*"},
+    ]
 
 
 def _bind_seed_key(value, key_arn: str):
@@ -247,7 +254,7 @@ def dedicated_guard(env: str, catalog: dict) -> dict:
     return {"Version": "2012-10-17", "Statement": statements}
 
 
-def merged_shared_ceiling(env: str, catalog: dict, name: str) -> tuple[dict, list[str]]:
+def merged_shared_ceiling(env: str, catalog: dict, name: str, branch: str = "A") -> tuple[dict, list[str]]:
     """In-place merge into Preview/Drift-only statements; KMS read separate."""
     st = catalog["statements"]
     n = _names(env)
@@ -264,7 +271,7 @@ def merged_shared_ceiling(env: str, catalog: dict, name: str) -> tuple[dict, lis
                 s["Resource"] = r + n["apply_policies"] + n["boundaries"]
             elif first == "s3:GetAccelerateConfiguration":
                 s["Resource"] = r + [n["replica"], n["state"]]
-            elif first == "access-analyzer:ValidatePolicy":
+            elif first == "access-analyzer:ValidatePolicy" and branch == "B":
                 s["Action"] = sorted(s["Action"] + ["logs:DescribeResourcePolicies"])
             else:
                 out.append(s)
@@ -282,20 +289,29 @@ def merged_shared_ceiling(env: str, catalog: dict, name: str) -> tuple[dict, lis
 
 
 def main() -> None:
+    out_dir = sys.argv[1] if len(sys.argv) > 1 else None
     for env in ("test", "prod"):
         catalog = json.load(open(f"seed/catalogs/{env}.json", encoding="utf-8"))
         statements = dedicated_apply_statements(env, catalog)
-        doc = {"Version": "2012-10-17", "Statement": statements}
+        docs = {
+            "dedicated-apply-ceiling-A": {"Version": "2012-10-17", "Statement": statements},
+            "dedicated-apply-ceiling-B": {"Version": "2012-10-17", "Statement": statements + branch_b_statements(env)},
+            "dedicated-apply-guard": dedicated_guard(env, catalog),
+        }
         print(env, "replica", replica_bucket(f"pulumi-{P}-{env}-state"))
-        print(env, "dedicated-apply-ceiling", len(canonical_json(doc)))
-        branch_b = {"Version": "2012-10-17", "Statement": statements + [put_scoped(env)]}
-        print(env, "dedicated-apply-ceiling-branch-B", len(canonical_json(branch_b)))
-        print(env, "dedicated-apply-identity", len(canonical_json(copy.deepcopy(doc))))
-        print(env, "dedicated-apply-guard", len(canonical_json(dedicated_guard(env, catalog))))
+        for key, doc in docs.items():
+            print(env, key, len(canonical_json(doc)))
+        print(env, "dedicated-apply-identity = ceiling (same statements, per branch)")
         for name in ("C-GitHubGovernancePreview", "C-GitHubGovernanceDrift"):
             before = {"Version": "2012-10-17", "Statement": [catalog["statements"][k] for k in _policy_ids(catalog, f"ceiling/{name}")]}
-            after, touched = merged_shared_ceiling(env, catalog, name)
-            print(env, name, len(canonical_json(before)), "->", len(canonical_json(after)), "in-place:", ",".join(touched))
+            for branch in ("A", "B"):
+                after, touched = merged_shared_ceiling(env, catalog, name, branch)
+                print(env, name, branch, len(canonical_json(before)), "->", len(canonical_json(after)), "in-place:", ",".join(touched))
+        if out_dir:
+            for key, doc in docs.items():
+                with open(f"{out_dir}/{key}-{env}.json", "w", encoding="utf-8") as fh:
+                    json.dump(doc, fh, indent=1, sort_keys=True)
+                    fh.write("\n")
 
 
 if __name__ == "__main__":

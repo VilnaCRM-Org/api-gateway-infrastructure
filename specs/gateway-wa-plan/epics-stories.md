@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-create-epics-and-stories (Creat
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 6 (2026-10-01: readiness round 2 N1-N6/L1-L12 resolved; D-A12, D-A13, D-A14)
+revision: 7 (2026-10-01: readiness round 3 R3-1…R3-6 and nits resolved; rows 21a, 31a-31c)
 inputDocuments: [prd.md, architecture.md, decisions.md]
 ---
 
@@ -44,7 +44,7 @@ Every story follows these rules:
 | FR-A02 | G1.1, G1.2 |
 | FR-A03 | G1.3 |
 | FR-A04 | G1.4a, G1.4b (TEST); G1.7, G1.8 (PROD) |
-| FR-A05 | G1.1 (logging role), G1.2, G1.5 |
+| FR-A05 | G1.1 (logging role), G1.2, G1.5, G1.5b (D-A12 branch B) |
 | FR-A06 | G1.6 |
 | FR-A07 | G2.2, XP-A3 |
 | FR-A08 | G2.1 |
@@ -62,7 +62,7 @@ Every story follows these rules:
 | FR-A20 | G5.5, G6.2 |
 | FR-A21 | G5.2, G6.2 |
 | FR-A22 | G5.6 |
-| FR-A23 | G6.2, G6.3 |
+| FR-A23 | G6.2a, G6.2, G6.3 |
 | FR-A24 | G0.1, G0.2, G4.1 |
 | FR-A25 | G5.1, G5.6 |
 | NFR-A01, -A11 | G2.1, G3.2 |
@@ -79,12 +79,12 @@ Every story follows these rules:
 | Epic | Goal | Stories |
 | --- | --- | --- |
 | E-G0 | Dispositions and inventory | G0.1, G0.2 |
-| E-G1 | Bootstrap enrolment (BI; D-A1) | G1.1, G1.2, G1.3, G1.4a, G1.4b, G1.5 … G1.8 |
+| E-G1 | Bootstrap enrolment (BI; D-A1) | G1.1, G1.2, G1.3, G1.4a, G1.4b, G1.5, G1.5b (branch B), G1.6 … G1.8 |
 | E-G2 | Repository hygiene and controls | G2.1, G2.2 |
 | E-G3 | Governed pipeline | G3.1 … G3.5 |
 | E-G4 | Certificates | G4.1, G4.2 |
 | E-G5 | TEST front door (USI S5.16, TEST) | G5.1 … G5.6 |
-| E-G6 | PROD front door (USI S5.16, PROD) | G6.1 … G6.3 |
+| E-G6 | PROD front door (USI S5.16, PROD) | G6.1, G6.2a, G6.2, G6.3 |
 
 ## Epic E-G0: Dispositions and inventory
 
@@ -143,9 +143,12 @@ ConfigRead roles.
 - **Needs:** D-A1, D-A9, D-A10, D-A11; V-A10 (the BI owner reverses
   origin/main's documented rule against extending the seed inventory,
   **before** any G1.1 code; AD-A1); **V-A8 resolved first** (the actions
-  without resource-level support, and whether a log-group-scoped
-  `logs:PutResourcePolicy` exists, which picks D-A12 branch A or B before
-  any form is chosen); V-A12 (every new or amended ceiling,
+  without resource-level support, and whether the scoped form exists:
+  a **resource-scoped** CloudWatch Logs resource policy on the exact
+  WAF log-group ARN (`resource_arn`, pinned `pulumi_aws` 7.23.0
+  `cloudwatch/log_resource_policy.py` 33-35, 85, 108-111). Together with
+  V-A6, whether WAF logging accepts it, this picks D-A12 branch A or B
+  before any form is chosen); V-A12 (every new or amended ceiling,
   guard and identity ≤ 6144, measured in AD-A1); V-A13 (the shared
   Preview/Drift ceilings re-rendered against the row-34 result catalog).
 - **Files:**
@@ -252,7 +255,14 @@ ConfigRead roles.
     repository id or a wildcard; the dedicated governance role's trust
     must name exactly the environment
     `{env}-governance-api-gateway-infrastructure` and the BI repository
-    claims of `governance_trust_policy`. Replaying the module against its result fails.
+    claims of `governance_trust_policy`; the replication role's trust must
+    carry both `aws:SourceAccount` and `aws:SourceArn` = the gateway state
+    bucket ARN (BI `pulumi_state.py` 123-142), and one without either is
+    refused. Replaying the module against its result fails. G1.1 builds
+    the dedicated ceiling, identity and guard from the pinned rendered
+    documents in `evidence/` (the copied USI action lists are fixed
+    there), not from a live re-derivation; a final-name render above 6144
+    is a STOP and a user decision.
   - E: the `GitHubOperator*` executor path is unchanged. Each boundary
     renders at ≤ 6144 characters (6144 passes, 6145 fails). Each role name
     is ≤ 64 characters, and every new policy basename is unique across the
@@ -346,7 +356,8 @@ ConfigRead roles.
      the gateway documents enumerate every read the shared ceilings admit
      (architecture AD-A1, "Identity grants matching the ceiling
      admissions"): `apigateway:GET /account`,
-     `logs:DescribeResourcePolicies`, and the KMS read for both
+     `logs:DescribeResourcePolicies` (D-A12 branch B only), and the KMS
+     read for both
      `pulumi-secrets` and `gateway-logs`, beyond today's
      `governance_repo_storage_policy` (`governance_automation.py` lines
      551-567) and metadata document (lines 714-736). A test fails if any
@@ -362,9 +373,13 @@ ConfigRead roles.
   2. A reviewed BI code change adds governance's external-identity mode
      (it reads the seed-created roles and creates none) and **per-target
      selection**: the workflow wiring of architecture AD-A1. This covers
+     the receipt call `deployment_worker_receipt.py --scope governance
+     --environment` (`pulumi-governance-account.yml` lines 680-689), which
+     selects contract steps by scope and environment only and so gains
+     the target. It also covers
      the target-keyed `AWS_GOVERNANCE_{ENV}_APPLY_GATEWAY_ROLE_ARN` read in
      `resolve`, the per-target apply environment (line 433), and
-     `PULUMI_STACK` with the four stack checks (lines 249, 392, 483, 621).
+     `PULUMI_STACK` with the four stack checks (lines 249-251, 392-394, 483-485, 621-623).
      A workflow fixture test shows that the gateway target's
      `role-to-assume` is the dedicated ARN and the USI target's is
      unchanged. `pulumi-governance-account.yml` runs the gateway as its
@@ -390,18 +405,34 @@ ConfigRead roles.
      `Pulumi.prod-api-gateway-infrastructure.yaml`, each with the target
      filter, the `secretsprovider` and the external-identity mode. The
      workflow's per-target change also covers the `PULUMI_PREVIEW_STACKS`
-     and `PULUMI_DRIFT_STACKS` checks (lines 250-251) and the
-     `--scope governance --environment` admission call (lines 114-119).
+     and `PULUMI_DRIFT_STACKS` checks (lines 250-251, and their copies at 393-394, 484-485 and 622-623) and the
+     `--scope governance --environment` admission call (lines 114-119, and the other `deployment_worker_runtime.py` calls at 226-231, 369, 460, 521 and 598).
      The live `pulumi stack init` of each gateway governance stack comes
      after step 3 and before step 4 (architecture AD-A1). The reviewed
      non-root human operator of XP-A1 runs it, TEST then PROD, with MFA.
-     The operator's own role is assumed with the committed session policy
-     `pulumi/governance/stack-init-session-policy-{env}.json`, which is
-     the init session policy (`s3:GetBucketLocation` on the governance state bucket; `s3:ListBucket` with `s3:prefix` limited to `governance/.pulumi/stacks/governance/`, so a missing `{stack}.json` answers 404, not 403; `s3:GetObject`, `GetObjectVersion` and `PutObject` on `governance/.pulumi/stacks/governance/{stack}.*`; `s3:GetObject` on `governance/.pulumi/meta.yaml`; and the governance secrets key by exact ARN for `kms:Encrypt`, `Decrypt`, `GenerateDataKey` and `DescribeKey`). Each run has per-action authorization and `@Kravalg`'s
-     approval. Acceptance: a simulator run of the session policy allows
-     `HeadObject` on a missing `{stack}.json`, `PutObject` on
-     `{stack}.json` and `GetObject` on `meta.yaml`, and denies
-     `PutObject` on USI's `{env}.json`. The dedicated role cannot run it: it trusts only the
+     The operator's own role (`<XP-A1-operator-role-arn>`, filled in by
+     the operator; its trust must allow self-assume) is assumed with the
+     committed session policy
+     `pulumi/governance/stack-init-session-policy-{env}.json`. That
+     policy holds the call set of architecture AD-A1, derived from the
+     pinned Pulumi CLI: a prefix listing with `s3:prefix` `StringLike`
+     `…/stacks/governance/{stack}.*`, the stack's own objects, `meta.yaml`,
+     lock paths only if init takes a lock, and the governance key. Each
+     run has per-action authorization and `@Kravalg`'s approval.
+     Acceptance:
+     - a simulator run of the session policy allows `HeadObject` on a
+       missing `{stack}.json`, `PutObject` on `{stack}.json` and
+       `GetObject` on `meta.yaml`, and denies `PutObject` on USI's
+       `{env}.json`;
+     - the absence proof is a prefix-restricted listing returning 0 keys,
+       not BI `docs/governance-stack.md` 240-247's `pulumi stack ls`. The
+       BI owner owns updating that BI document;
+     - evidence that the narrowed session was used: the session ARN from
+       `get-caller-identity`, the CloudTrail `AssumeRole` event id, and a
+       same-session `head-object` on USI's
+       `governance/.pulumi/stacks/governance/{env}.json` that returns 403;
+     - the `encryptedkey` that `stack init` writes is never committed
+       (BI docs 258-260). The dedicated role cannot run it: it trusts only the
      workflow's OIDC, and the workflow requires an existing checkpoint
      (`scripts/_pulumi_stack_config.py` lines 147-152 and 286-308). The
      readback of the checkpoint's `VersionId` and `ETag` is recorded.
@@ -411,7 +442,11 @@ ConfigRead roles.
      required reviewer, `main` only). The admin also sets the repository
      variables `AWS_GOVERNANCE_{TEST,PROD}_APPLY_GATEWAY_ROLE_ARN` from the
      G1.2 readback. These are live admin actions with their own per-action
-     authorization.
+     authorization. **Readback before the first gateway-target run:** each
+     `{env}-governance-api-gateway-infrastructure` environment has
+     `@Kravalg` as required reviewer (self-review prevented, no admin
+     bypass) and deployment branches limited to `main` only. The readback
+     is attached to the G1.3 PR; a mismatch is a STOP.
   4. A governance catalog PR adds the gateway to
      `pulumi/repositories.governance.json` in that mode. It creates the
      backend and writes the basic `pulumi-backend` and `secret-read-deny`
@@ -500,18 +535,22 @@ ConfigRead roles.
 ### G1.5 (BI): Gateway account prerequisites (TEST, then PROD)
 
 - **Needs:** G1.2 (the logging role and the admission); G1.3 (governance
-  mode); XP-A5; XP-A12.
+  mode); XP-A5; XP-A12; under D-A12 branch A also XP-A1 and an XP-A4
+  slot for the seed operator's write.
 - **Work:** AD-A9. Governance (D-A9) sets `AWS::ApiGateway::Account` with
-  the G1.2 logging role. The D-A5 WAF-log resource policy follows D-A12:
-  - **branch A**, no scoped form: the human seed operator writes it once,
-    outside CI, in its own XP-A4 slot (XP-A1). The BI owner owns it. The
-    evidence is the written document, a `DescribeResourcePolicies`
-    readback and `@Kravalg`'s approval;
-  - **branch B**: governance writes it with `logs:PutResourcePolicy`
-    scoped to the gateway WAF log group. If XP-A5 shows the API Gateway service-linked role missing, the
-  human seed operator or the XP-A1 installer creates it, outside CI,
-  before G5.3. The governance guard denies
-  `iam:CreateServiceLinkedRole` for this service (`05f77e26…`).
+  the G1.2 logging role. If XP-A5 shows the API Gateway service-linked
+  role missing, the human seed operator or the XP-A1 installer creates it,
+  outside CI, before G5.3. The governance guard denies
+  `iam:CreateServiceLinkedRole` for this service (`05f77e26…`). The D-A5
+  WAF-log resource policy follows D-A12:
+  - **branch A**, no scoped form: the human seed operator writes an
+    account-scoped policy for `aws-waf-logs-api-gateway-infrastructure-*`
+    once, outside CI, in its own XP-A4 slot (XP-A1). The BI owner owns
+    it. The evidence is the written document, a
+    `DescribeResourcePolicies` readback and `@Kravalg`'s approval;
+  - **branch B**: not written here. The resource-scoped policy needs the
+    log group, so it is written in G1.5b (rows 21a and 31b), after the CI
+    Apply role creates the log group.
 - **Acceptance:**
   - P: `GetAccount` returns the logging role's ARN, and the SLR reads
     back.
@@ -521,6 +560,37 @@ ConfigRead roles.
     an overwrite.
 - **STOP:** XP-A12 finds another owner and no agreement; any role found
   holding `logs:PutResourcePolicy` on `*` (D-A12).
+
+### G1.5b (BI; D-A12 branch B only): Resource-scoped WAF-log policy (TEST row 21a, PROD row 31b)
+
+- **Needs:** G1.5 (governance mode, branch B chosen by V-A8 in G1.1,
+  V-A6 checked); for PROD, G1.8 (row 29) precedes it in the C-BI-A
+  chain; the WAF log group created by the CI Apply role (TEST:
+  row 21, G5.2; PROD: row 31a, G6.2a). Under branch A this story does not
+  exist (rows 21a and 31b are recorded as not applicable). The seed
+  operator's account-scoped write then took its slot before row 16.
+- **Work:** a governance PR declares `aws.cloudwatch.LogResourcePolicy`
+  with `resource_arn` = the exact
+  `aws-waf-logs-api-gateway-infrastructure-{env}` log-group ARN, which
+  pinned `pulumi_aws` 7.23.0 supports (`cloudwatch/log_resource_policy.py`
+  lines 33-35, 85, 108-111). The policy allows
+  `delivery.logs.amazonaws.com` with `aws:SourceAccount` and
+  `aws:SourceArn`. It is applied under the dedicated role, whose ceiling
+  and identity allow `logs:PutResourcePolicy` on exactly that ARN.
+  The program first looks up the log group (`aws.cloudwatch.get_log_group`
+  on the exact name). Governance never creates the log group.
+- **Acceptance:**
+  - P: `DescribeResourcePolicies` shows the resource-scoped policy on the
+    log group.
+  - N: the dedicated role is denied `PutResourcePolicy` without
+    `resource_arn` and on any other log group (simulator).
+  - E: the program reads the log group with `aws.cloudwatch.get_log_group`
+    before declaring the policy, so a preview or apply before the log
+    group exists fails at plan time, with no partial write.
+- **STOP:** the log group is absent; V-A6 shows WAF rejecting the
+  resource-scoped policy. Branch A then applies as a recorded consequence
+  of D-A12, through G5.4's contingency rows 23-F3, 23-F1 and 23-F2 (which
+  also remove the branch-B grants); this is no new decision.
 
 ### G1.6 (BI): Gateway CMK (TEST, then PROD)
 
@@ -716,7 +786,7 @@ ConfigRead roles.
   `{env}-drift` runs `preview --refresh --expect-no-changes` and passes;
   the TEST schedule sits inside the USI weekday daytime window (PD-13).
   N: a fixture diff fails the job. E: the probe is skipped with a
-  recorded reason until the stack exports a domain (row 24 TEST, row 31
+  recorded reason until the stack exports a domain (row 24 TEST, row 31c
   PROD), and nothing is published while it is skipped; once the probe
   runs (after the Drift `PutMetricData` grant of row 18 TEST, row 29
   PROD), its result is published to the `ApiGatewayInfrastructure/{env}`
@@ -802,7 +872,9 @@ ConfigRead roles.
 
 ### G5.4 (AGI): WAF
 
-- **Needs:** G5.3; G1.5 (WAF-log policy, D-A5).
+- **Needs:** G5.3; the WAF-log resource policy (D-A5, D-A12): under
+  branch A the seed operator's write (slot before row 16, G1.5); under
+  branch B G1.5b TEST (row 21a).
 - **Files:** `pulumi/app/waf.py`, tests.
 - **Work:** AD-A6; the token path is read from the user-service routes
   and recorded in stack config with its source.
@@ -810,6 +882,35 @@ ConfigRead roles.
   and logs to the KMS log group (V-A6). N: a WCU sum above 1,500 fails; a
   rule without visibility config fails. E: the CommonRuleSet override is
   `count` in TEST until gate A-T step 11.
+- **STOP (D-A12 branch B, V-A6 live):** if the TEST apply shows WAF
+  logging rejecting the resource-scoped policy of row 21a, STOP. This is a
+  recorded consequence of D-A12, not a new decision: a scoped form that
+  WAF does not accept is treated as no usable scoped form, so branch A
+  applies. The **contingency rows** run in this order, then row 23 is
+  retried. No governance role ever holds `logs:DeleteResourcePolicy`.
+  1. **23-F3 (first; TEST only, since row 31b has not run).** The XP-A1
+     human operator deletes the row-21a resource policy out of CI. It is
+     done under a narrowed session in the init pattern of G1.3 step 2a:
+     `logs:DeleteResourcePolicy` and `DescribeResourcePolicies` on the
+     exact log-group ARN, plus the gateway governance stack's checkpoint
+     paths. The same session runs `pulumi state delete` of that
+     resource's URN. Both actions have their own per-action authorization
+     and `@Kravalg`'s approval. A reviewed governance PR then removes the
+     G1.5b declaration; its plan shows no change. These steps run while
+     the branch-B read grants still exist.
+  2. **23-F1 (TEST then PROD).** A seed amendment in its own XP-A4 slot
+     (XP-A1) drops the branch-B grants from the dedicated ceiling and
+     identity and from the shared ceilings' `2be63eb2…`, and re-renders
+     to the branch-A sizes (5830; 5387/5397). It is a catalog change in
+     the shared queue. Under CR-A2 every later USI seed module rebases
+     onto its result catalog, and a reviewed PR re-pins
+     `CATALOG_HASHES[env]` after readback.
+  3. **23-F2 (TEST then PROD).** The human seed operator writes the
+     account-scoped policy in its own XP-A4 slot, with branch A's owner
+     and evidence.
+
+  Row 31b then does not apply. G6.2 takes the PROD account-scoped write
+  from 23-F2.
 
 ### G5.5 (AGI): Custom domain and DNS
 
@@ -844,13 +945,37 @@ ConfigRead roles.
 ### G6.1 (AGI): PROD backend contract pin
 
 - **Needs:** G5.6, G4.2, G1.8; XP-A7 (PROD descriptor, row 28); D-A8.
-- **Acceptance:** as G5.1 for PROD (`Pulumi.prod.yaml`
-  `features.front_door: true`).
+- **Acceptance:** as G5.1 for PROD, with the contract pinned and
+  `features.front_door` still `false`; G6.2a sets `observability`, and
+  G6.2 sets `true`.
 
-### G6.2 (AGI): PROD front door, gate A-P
+### G6.2a (AGI): PROD observability apply (row 31a)
 
-- **Needs:** G6.1; the D-A7 values derived from the G5.6 evidence;
-  XP-A10 (the PROD alarm endpoint).
+- **Needs:** G6.1; XP-A10 (the PROD alarm endpoint).
+- **Files:** `pulumi/app/config.py` (the closed value `observability`
+  for `features.front_door`, accepted only in `prod`; G3.1's rule "front
+  door on with certificate off fails" applies to `observability` too),
+  `pulumi/__main__.py` (builds only the contract checks and
+  `app/observability.py` for that value), `Pulumi.prod.yaml`, tests.
+- **Work:** `Pulumi.prod.yaml` sets `features.front_door: observability`
+  (AD-A15). The PROD apply creates only the contract checks, the two log
+  groups (including `aws-waf-logs-api-gateway-infrastructure-prod`), the
+  topic and the alarms.
+- **Acceptance:**
+  - P: the plan creates no VPC link, REST API, web ACL or WAF logging
+    configuration.
+  - N: `observability` in `test` is refused (TEST built its modules story
+    by story).
+  - E: under branch A this step may be merged with G6.2 by the gateway
+    owner; it is kept separate so the order holds for both branches.
+
+### G6.2 (AGI): PROD front door, gate A-P (row 31c)
+
+- **Needs:** G6.2a; under D-A12 branch B, G1.5b PROD (row 31b); under
+  branch A, the PROD account-scoped write (the seed operator's slot
+  before row 16, or 23-F2 after a contingency); the D-A7
+  values derived from the G5.6 evidence; XP-A10 (the PROD alarm
+  endpoint).
 - **Work:** stack config for PROD only (the program is shared); the
   CommonRuleSet in block from the start with the TEST overrides.
 - **Acceptance:** P: `/pulumi prod plan` and `up` after the same head's
@@ -898,6 +1023,7 @@ ConfigRead roles.
 | 19 | XP-A7 TEST descriptor from the USI owner (D-A8), **after USI S4.6 step 20 (D-A2; CR-A1)** | USI | external |
 | 20 | G5.1 TEST backend contract pin | AGI | C-contract, C-program |
 | 21 | G5.2 log groups, topic, alarms, runbooks (XP-A10) | AGI | C-program |
+| 21a | G1.5b TEST resource-scoped WAF-log policy (D-A12 branch B only; not applicable under branch A) | BI | C-BI-A; governance apply |
 | 22 | G5.3 VPC link, REST API, stage | AGI | C-program |
 | 23 | G5.4 WAF | AGI | C-program |
 | 24 | G5.5 custom domain and DNS | AGI | C-program |
@@ -905,15 +1031,17 @@ ConfigRead roles.
 | 26 | G1.7 PROD certificate and read grants (D-A3, XP-A11; governance) | BI | C-BI-A; governance apply |
 | 27 | G4.2 PROD certificate for `user.vilnacrm.com`; ARN to USI **before USI row 49** | AGI | C-program |
 | 28 | XP-A7 PROD descriptor from the USI owner, **after USI row 52** | USI | external |
-| 29 | G1.8 PROD front-door grants (governance) | BI | C-BI-A tail; governance apply |
+| 29 | G1.8 PROD front-door grants (governance) | BI | C-BI-A (the tail under branch A; under branch B, row 31b is the tail); governance apply |
 | 30 | G6.1 PROD backend contract pin | AGI | C-contract tail |
-| 31 | G6.2 PROD front door, gate A-P (D-A7) | AGI | C-program tail |
+| 31a | G6.2a PROD observability apply (`features.front_door: observability`; creates the WAF log group) | AGI | C-program |
+| 31b | G1.5b PROD resource-scoped WAF-log policy (D-A12 branch B only; not applicable under branch A) | BI | C-BI-A tail; governance apply |
+| 31c | G6.2 PROD front door, gate A-P (D-A7) | AGI | C-program tail |
 | 32 | G6.3 PROD acceptance, drift and probe | AGI | live PROD |
 
 Revision 1's rows 26-28 (G1.9, G5.7, G5.8, which existed only under
 OQ-8 (a)) are removed by D-A2. Its rows 29-35 are now rows 26-32.
 
-**No forward dependencies (checked over all 33 rows, 0-32).** Every
+**No forward dependencies (checked over all 36 rows: 0-32 with 21a, 31a, 31b and 31c in place of 31; true under both D-A12 branches — under branch A, rows 21a and 31b are not applicable and nothing depends on them).** Every
 story's "Needs" names only lower-numbered rows, user decisions (D-A…),
 external preconditions (XP-A…) or verification items. No question is
 open.
@@ -934,15 +1062,19 @@ open.
 - G5.1 (20) needs 15, 18 and 19.
 - G5.2 (21) needs 20 and 17.
 - G5.3 (22) needs 21 and 16.
-- G5.4 (23) needs 22 and 16.
+- G1.5b TEST (21a, branch B) needs 16 and 21.
+- G5.4 (23) needs 22 and 16, and under branch B also 21a.
 - G5.5 (24) needs 23.
 - G5.6 (25) needs 14 and 24.
 - G1.7 (26) needs 11, D-A3 and XP-A11.
 - G4.2 (27) needs 15, 25 (the step-11 PR) and 26.
 - G1.8 (29) needs 25 and 26.
 - G6.1 (30) needs 25, 27, 28 and 29.
-- G6.2 (31) needs 30.
-- G6.3 (32) needs 31.
+- G6.2a (31a) needs 30.
+- G1.5b PROD (31b, branch B) needs 16, 29 (C-BI-A order) and 31a.
+- Contingency rows 23-F3, 23-F1 and 23-F2, in that order (branch B, V-A6 failing live), run after 21a and 22 and before the retry of 23.
+- G6.2 (31c) needs 31a, and under branch B also 31b.
+- G6.3 (32) needs 31c.
 
 Other levels of the check:
 
