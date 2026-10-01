@@ -55,23 +55,22 @@ If the documentation doesn't cover what you need, search the [many questions on 
 
 If this isn't passing, is there something you can do to help?
 
-## Repository Synchronization
+## Local AWS access (SSO debugging only)
 
-This template is automatically synchronized with other repositories in our ecosystem. Whenever changes are made to the template, those changes are propagated to dependent projects, ensuring they stay up to date with the latest improvements and best practices.
+The container never receives static AWS keys: `docker-compose.yml` passes only `AWS_PROFILE` and `AWS_REGION`. For local debugging, sign in with IAM Identity Center (SSO) inside the container:
 
-The synchronization is powered by the [actions-template-sync](https://github.com/AndreasAugustin/actions-template-sync) GitHub Action, which automates the process of propagating updates from this template to other projects.
+```
+make start
+make sh
+aws configure sso          # once; then: aws sso login --use-device-code
+export AWS_PROFILE=<your-sso-profile>
+```
 
-### Handling Workflow Permissions Error
+SSO sessions are short-lived and live only in the container's home directory. CI and deployments never use this path: they use GitHub OIDC roles only. Do not create or export long-lived access keys. See [AGENTS.md](AGENTS.md) for the repository rules.
 
-When setting up the repository synchronization, you may encounter permission-related issues. Below are two methods to resolve common workflow permissions errors: using a Personal Access Token (PAT) or using a GitHub App.
+## Releases
 
-#### Option 1: Using a Personal Access Token (PAT)
-
-Details on how to configure and use a PAT for repository synchronization can be found in the [TEMPLATE_SYNC_PAT.md](.github/TEMPLATE_SYNC_PAT.md) file inside the `.github` directory.
-
-#### Option 2: Using a GitHub App
-
-For projects that prefer GitHub App authentication, please refer to the [TEMPLATE_SYNC_APP.md](.github/TEMPLATE_SYNC_APP.md) file in the `.github` directory for setup instructions and examples.
+Pushes to `main` run `.github/workflows/autorelease.yml`, which derives the next version from conventional commits, then creates the tag and the GitHub release (generated notes) with the job's `GITHUB_TOKEN`. It does not commit to `main`, so `CHANGELOG.md` is no longer updated automatically; the GitHub releases page is the changelog.
 
 ## Security
 Please disclose any vulnerabilities found responsibly – report security issues to the maintainers privately.
