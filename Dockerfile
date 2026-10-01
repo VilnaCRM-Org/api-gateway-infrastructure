@@ -31,6 +31,14 @@ ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62
 ARG HADOLINT_VERSION=2.14.0
 ARG HADOLINT_SHA256_AMD64=6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47
 ARG HADOLINT_SHA256_ARM64=331f1d3511b84a4f1e3d18d52fec284723e4019552f4f47b19322a53ce9a40ed
+# G3.1 hand-off F02 (G3.3): the `aws` resource plugin, preinstalled so that no
+# preview downloads an unpinned plugin and the offline Structural Preview runs
+# under --network none. It equals the locked pulumi-aws SDK. Each SHA-256
+# equals the GitHub release asset digest of pulumi/pulumi-aws v7.23.0, and the
+# release's pulumi-aws_7.23.0_checksums.txt (SHA-1) matches the same tarballs.
+ARG PULUMI_AWS_PLUGIN_VERSION=7.23.0
+ARG PULUMI_AWS_PLUGIN_SHA256_AMD64=f5c585152bbacf11a0c02376ade122b7e74095e9b2f98dd291cbec1d880e7b4c
+ARG PULUMI_AWS_PLUGIN_SHA256_ARM64=c6070f8d8ae740e617dd8e7de974b39d9f27d4f9703ec67b5413932572034592
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Transient download tools only. Bookworm's rolling security repositories do
@@ -157,6 +165,23 @@ RUN bash -o pipefail -c 'set -euo pipefail \
     && install -m 0755 /tmp/hadolint /usr/local/bin/hadolint \
     && rm -f /tmp/hadolint'
 
+# Installed into a staging PULUMI_HOME with the CLI's own `plugin install
+# --file`, which reads only the verified tarball (no network).
+RUN bash -o pipefail -c 'set -euo pipefail \
+    && case "${TARGETARCH}" in \
+        amd64) plugin_arch="amd64"; plugin_sha256="${PULUMI_AWS_PLUGIN_SHA256_AMD64}" ;; \
+        arm64) plugin_arch="arm64"; plugin_sha256="${PULUMI_AWS_PLUGIN_SHA256_ARM64}" ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl --fail --silent --show-error --location \
+        --retry 12 --retry-delay 10 --retry-max-time 240 --retry-all-errors \
+        "https://github.com/pulumi/pulumi-aws/releases/download/v${PULUMI_AWS_PLUGIN_VERSION}/pulumi-resource-aws-v${PULUMI_AWS_PLUGIN_VERSION}-linux-${plugin_arch}.tar.gz" \
+        --output /tmp/pulumi-resource-aws.tar.gz \
+    && echo "${plugin_sha256}  /tmp/pulumi-resource-aws.tar.gz" | sha256sum -c - \
+    && PULUMI_HOME=/opt/pulumi-home PULUMI_SKIP_UPDATE_CHECK=true /opt/pulumi/pulumi plugin install resource aws "${PULUMI_AWS_PLUGIN_VERSION}" \
+        --file /tmp/pulumi-resource-aws.tar.gz \
+    && rm -f /tmp/pulumi-resource-aws.tar.gz'
+
 FROM ${BASE_IMAGE} AS dev
 
 ARG USERNAME=dev
@@ -169,6 +194,8 @@ ENV AWS_PAGER=""
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PULUMI_HOME=${HOME}/.pulumi
 ENV PULUMI_SKIP_UPDATE_CHECK=true
+# F02: a missing plugin fails the command instead of being downloaded.
+ENV PULUMI_DISABLE_AUTOMATIC_PLUGIN_ACQUISITION=true
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_LINK_MODE=copy
@@ -207,6 +234,7 @@ COPY --from=tooling /usr/local/bin/actionlint /usr/local/bin/actionlint
 COPY --from=tooling /usr/local/bin/shellcheck /usr/local/bin/shellcheck
 COPY --from=tooling /usr/local/bin/gitleaks /usr/local/bin/gitleaks
 COPY --from=tooling /usr/local/bin/hadolint /usr/local/bin/hadolint
+COPY --from=tooling --chown=${USERNAME}:${GID} /opt/pulumi-home/plugins ${PULUMI_HOME}/plugins
 
 RUN ln -sf /opt/pulumi/pulumi /usr/local/bin/pulumi \
     && ln -sf /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
@@ -223,13 +251,14 @@ RUN --mount=type=cache,target=/home/${USERNAME}/.cache/uv,uid=${UID},gid=${GID} 
     uv venv "${UV_PROJECT_ENVIRONMENT}" \
     && uv sync --frozen --all-groups \
     && pulumi version >/dev/null \
+    && test -x "${PULUMI_HOME}/plugins/resource-aws-v7.23.0/pulumi-resource-aws" \
     && aws --version >/dev/null \
     && actionlint -version >/dev/null \
     && shellcheck --version >/dev/null \
     && gitleaks version >/dev/null \
     && hadolint --version >/dev/null \
     && uv run --frozen python -c 'import pulumi, pulumi_aws, yaml' \
-    && chown -R "${USERNAME}:$(id -g "${USERNAME}")" "${UV_PROJECT_ENVIRONMENT}" "${UV_CACHE_DIR}"
+    && chown -R "${USERNAME}:$(id -g "${USERNAME}")" "${UV_PROJECT_ENVIRONMENT}" "${UV_CACHE_DIR}" "${PULUMI_HOME}"
 
 USER "${USERNAME}"
 WORKDIR /workspace
