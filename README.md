@@ -52,6 +52,16 @@ The Python toolchain is [uv](https://docs.astral.sh/uv/) with the frozen, hash-p
 
 The `ci` stack runs the credential-free Structural Preview on a local file backend. It uses the `passphrase` secrets provider with an **intentionally empty, non-secret passphrase** (`PULUMI_CONFIG_PASSPHRASE=""`, as USI's `dev` stack does), and it holds no secret. Its account is the AWS documentation example account `123456789012`, never a real VilnaCRM account. `test` and `prod` refuse a passphrase provider and pin their own account, region, S3 backend and KMS key.
 
+### Program guardrails and G3.x hand-offs
+
+`pulumi/app/config.py` also refuses a `Pulumi.yaml` with anything beyond `name`, `description` and `runtime: python` (no `main`, `stackConfigDir`, project `config:` or runtime options); every stack sets `pulumi:disable-default-providers: ["*"]`; only the literal YAML booleans `true`/`false` count as booleans; and `pulumi/__main__.py` fails unless the engine's config (`PULUMI_CONFIG`) equals the checked stack file, which also refuses `--config-file` and per-key `PULUMI_CONFIG_<KEY>` overrides.
+
+Recorded hand-offs from the G3.1 gate (attempt 1):
+
+- **F02 (before G3.3 / G4.1):** install the `aws` resource plugin 7.23.0 in the image from a pinned URL with a verified SHA-256, so previews never download an unpinned plugin.
+- **F06:** recorded by ID from the G3.1 gate report; carry its text from that report.
+- **F07 (G3.2):** extend the 100% branch-coverage gate to `scripts/` and `policy/`, and replace the Poetry-era `pulumi/.flake8` and `pulumi/.pre-commit-config.yaml` with the G3.2 battery.
+
 ## Documentation
 Start reading at the [GitHub wiki](https://github.com/VilnaCRM-Org/infrastructure-template/wiki). If you're having trouble, head for [the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting) as it's frequently updated.
 
