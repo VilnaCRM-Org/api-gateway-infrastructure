@@ -126,3 +126,15 @@ def test_f36_non_core_yaml_tags_rejected(value: str) -> None:
 def test_f36_core_tags_still_parse() -> None:
     text = PR_OK.replace("runs-on: ubuntu-latest", "runs-on: !!str ubuntu-latest")
     assert wc.check_workflow(text) == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("    name: Release\n", ""),
+        ("    name: Release\n", "    name: Release ${{ github.token }}\n"),
+        ("    name: Release\n", "    name: Ruff\n"),
+    ],
+)
+def test_g32_f06_release_job_name_is_pinned(old: str, new: str) -> None:
+    assert wc.check_autorelease(replaced(old, new))

@@ -289,7 +289,8 @@ FORBIDDEN_RUN = re.compile(
 # process substitution) join the G2.1 list.
 SHELL_CHAINING = re.compile(r"[;&|`#<>]|\$\(")
 TOP_KEYS = {"name", "on", True, "concurrency", "permissions", "jobs"}
-JOB_KEYS = {"runs-on", "timeout-minutes", "permissions", "steps"}
+JOB_KEYS = {"name", "runs-on", "timeout-minutes", "permissions", "steps"}
+AUTORELEASE_JOB_NAME = "Release"
 STEP_KEYS = {"name", "id", "uses", "with", "run", "if", "env"}
 ENV_KEYS = {"GH_TOKEN", "TAG"}
 GH_TOKEN = "${{ github.token }}"  # nosec B105  # expression text, not a token
@@ -328,6 +329,8 @@ def _autorelease_job(name, job, v):
         v.append(f"job {name}: keys not allowed: {sorted(bad)}")
     if job.get("runs-on") != "ubuntu-latest":
         v.append(f"job {name}: runs-on must be ubuntu-latest")
+    if job.get("name") != AUTORELEASE_JOB_NAME:
+        v.append(f"job {name}: name must be {AUTORELEASE_JOB_NAME!r}")
 
 
 def _autorelease_step_keys(step, v):
