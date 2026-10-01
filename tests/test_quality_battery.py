@@ -29,8 +29,9 @@ PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 DOCKERFILE = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
 # AD-A11 required checks that G3.2 owns. `Structural Preview`, `Destructive
-# Diff Gate`, `IAM Gate`, `Policy` and `Contract Schema` arrive in G3.3; the
-# G2.2 test pins the full list against the workflows.
+# Diff Gate`, `IAM Gate`, `Policy` and `Contract Schema` are G3.3's
+# (`pulumi-pr-guardrails.yml`, tests/test_guardrail_workflow.py); the G2.2
+# test pins the full list against the workflows.
 BATTERY_CHECKS = {
     "Ruff": "test-ruff",
     "Types": "test-types",
@@ -83,11 +84,21 @@ def test_battery_jobs_are_exactly_the_ad_a11_checks() -> None:
     assert sorted(names) == sorted(BATTERY_CHECKS)
 
 
-def test_no_workflow_yet_claims_a_g33_check() -> None:
-    names = {
+def test_g33_owns_exactly_the_five_guardrail_checks() -> None:
+    """G3.3 flipped the G3.2 placeholder: the guardrail workflow, and only
+    it, claims the five G3.3 checks, and no check name is reported twice."""
+    names = [
         n for wf in WF_DIR.glob("*.y*ml") for n in wc.job_check_names(wf.read_text())
+    ]
+    assert len(names) == len(set(names))
+    owners = {
+        wf.name
+        for wf in WF_DIR.glob("*.y*ml")
+        if set(wc.job_check_names(wf.read_text())) & G33_CHECKS
     }
-    assert not names & G33_CHECKS
+    assert owners == {"pulumi-pr-guardrails.yml"}
+    guardrails = wc.job_check_names(battery_text("pulumi-pr-guardrails.yml"))
+    assert sorted(guardrails) == sorted(G33_CHECKS)
 
 
 @pytest.mark.parametrize(("check", "target"), sorted(BATTERY_CHECKS.items()))
@@ -171,8 +182,12 @@ def test_ruff_first_party_modules() -> None:
     local -= {"conftest"}
     local = {m for m in local if not m.startswith("test_")}
     packages = {
-        p.name for p in (ROOT / "pulumi").iterdir() if (p / "__init__.py").exists()
+        p.name
+        for base in (ROOT / "pulumi", ROOT)
+        for p in base.iterdir()
+        if (p / "__init__.py").exists()
     }
+    assert "policy" in packages
     assert set(isort["known-first-party"]) == local | packages
 
 

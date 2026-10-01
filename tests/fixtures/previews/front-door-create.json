@@ -1,0 +1,299 @@
+{
+ "_source": "trimmed from a real offline pulumi 3.223.0 / aws 7.23.0 preview (G3.3 evidence; Pulumi's unknown-value sentinel shown as [unknown]): create-only front door, --show-sames --show-replacement-steps",
+ "changeSummary": {
+  "create": 16
+ },
+ "steps": [
+  {
+   "detailedDiff": null,
+   "newState": {
+    "type": "pulumi:pulumi:Stack"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::pulumi:pulumi:Stack::exp-ci"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "__internal": {},
+     "accessKey": "[secret]",
+     "region": "eu-central-1",
+     "secretKey": "[secret]",
+     "skipCredentialsValidation": "true",
+     "skipMetadataApiCheck": "true",
+     "skipRegionValidation": "true",
+     "skipRequestingAccountId": "true",
+     "version": "7.23.0"
+    },
+    "type": "pulumi:providers:aws"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::pulumi:providers:aws::aws"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "disableExecuteApiEndpoint": true,
+     "name": "api-86df003",
+     "putRestApiMode": "overwrite",
+     "region": "eu-central-1",
+     "tagsAll": {}
+    },
+    "type": "aws:apigateway/restApi:RestApi"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "name": "l",
+     "region": "eu-central-1",
+     "securityGroupIds": [
+      "sg-0123456789abcdef0"
+     ],
+     "subnetIds": [
+      "subnet-0123456789abcdef0",
+      "subnet-0123456789abcdef1"
+     ],
+     "tagsAll": {}
+    },
+    "type": "aws:apigatewayv2/vpcLink:VpcLink"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigatewayv2/vpcLink:VpcLink::link"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "kmsKeyId": "arn:aws:kms:eu-central-1:123456789012:key/00000000-0000-0000-0000-000000000000",
+     "name": "/aws/apigateway/api-gateway-infrastructure-ci/access",
+     "region": "eu-central-1",
+     "retentionInDays": 30,
+     "skipDestroy": false,
+     "tagsAll": {}
+    },
+    "type": "aws:cloudwatch/logGroup:LogGroup"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:cloudwatch/logGroup:LogGroup::lg"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "domainName": "user.example.com",
+     "endpointAccessMode": "STRICT",
+     "endpointConfiguration": {
+      "__defaults": [],
+      "types": "REGIONAL"
+     },
+     "region": "eu-central-1",
+     "regionalCertificateArn": "arn:aws:acm:eu-central-1:123456789012:certificate/00000000-0000-0000-0000-000000000000",
+     "securityPolicy": "SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09",
+     "tagsAll": {}
+    },
+    "type": "aws:apigateway/domainName:DomainName"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/domainName:DomainName::d"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "actionsEnabled": true,
+     "comparisonOperator": "GreaterThanThreshold",
+     "evaluationPeriods": 1,
+     "metricName": "5XXError",
+     "name": "alarm-d1aaa57",
+     "namespace": "AWS/ApiGateway",
+     "period": 60,
+     "region": "eu-central-1",
+     "statistic": "Sum",
+     "tags": {
+      "runbook": "docs/runbooks/5xx.md"
+     },
+     "tagsAll": {
+      "runbook": "docs/runbooks/5xx.md"
+     },
+     "threshold": 1,
+     "treatMissingData": "missing"
+    },
+    "type": "aws:cloudwatch/metricAlarm:MetricAlarm"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:cloudwatch/metricAlarm:MetricAlarm::alarm"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "defaultAction": {
+      "__defaults": [],
+      "allow": {
+       "__defaults": []
+      }
+     },
+     "name": "acl-76749bc",
+     "region": "eu-central-1",
+     "scope": "REGIONAL",
+     "tagsAll": {},
+     "visibilityConfig": {
+      "__defaults": [],
+      "cloudwatchMetricsEnabled": true,
+      "metricName": "x",
+      "sampledRequestsEnabled": true
+     }
+    },
+    "type": "aws:wafv2/webAcl:WebAcl"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:wafv2/webAcl:WebAcl::acl"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "kmsKeyId": "arn:aws:kms:eu-central-1:123456789012:key/00000000-0000-0000-0000-000000000000",
+     "name": "aws-waf-logs-api-gateway-infrastructure-ci",
+     "region": "eu-central-1",
+     "retentionInDays": 30,
+     "skipDestroy": false,
+     "tagsAll": {}
+    },
+    "type": "aws:cloudwatch/logGroup:LogGroup"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:cloudwatch/logGroup:LogGroup::waflg"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "apiKeyRequired": false,
+     "authorization": "NONE",
+     "httpMethod": "ANY",
+     "region": "eu-central-1",
+     "resourceId": "[unknown]",
+     "restApi": "[unknown]"
+    },
+    "type": "aws:apigateway/method:Method"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/method:Method::m"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "connectionId": "[unknown]",
+     "connectionType": "VPC_LINK",
+     "httpMethod": "ANY",
+     "integrationHttpMethod": "ANY",
+     "integrationTarget": "arn:aws:elasticloadbalancing:eu-central-1:123456789012:loadbalancer/app/alb/0123456789abcdef",
+     "region": "eu-central-1",
+     "resourceId": "[unknown]",
+     "restApi": "[unknown]",
+     "timeoutMilliseconds": 29000,
+     "tlsConfig": {
+      "__defaults": [],
+      "insecureSkipVerification": false
+     },
+     "type": "HTTP_PROXY",
+     "uri": "https://user.example.com/"
+    },
+    "type": "aws:apigateway/integration:Integration"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/integration:Integration::i"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "region": "eu-central-1",
+     "restApi": "[unknown]",
+     "triggers": {
+      "h": "one"
+     }
+    },
+    "type": "aws:apigateway/deployment:Deployment"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "accessLogSettings": {
+      "__defaults": [],
+      "destinationArn": "[unknown]",
+      "format": "{}"
+     },
+     "deployment": "[unknown]",
+     "region": "eu-central-1",
+     "restApi": "[unknown]",
+     "stageName": "live",
+     "tagsAll": {}
+    },
+    "type": "aws:apigateway/stage:Stage"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/stage:Stage::st"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "methodPath": "*/*",
+     "region": "eu-central-1",
+     "restApi": "[unknown]",
+     "settings": {
+      "__defaults": [],
+      "loggingLevel": "OFF",
+      "metricsEnabled": true,
+      "throttlingBurstLimit": 100,
+      "throttlingRateLimit": 50
+     },
+     "stageName": "live"
+    },
+    "type": "aws:apigateway/methodSettings:MethodSettings"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/methodSettings:MethodSettings::ms"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "domainName": "user.example.com",
+     "region": "eu-central-1",
+     "restApi": "[unknown]",
+     "stageName": "live"
+    },
+    "type": "aws:apigateway/basePathMapping:BasePathMapping"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/basePathMapping:BasePathMapping::bpm"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "region": "eu-central-1",
+     "resourceArn": "[unknown]",
+     "webAclArn": "[unknown]"
+    },
+    "type": "aws:wafv2/webAclAssociation:WebAclAssociation"
+   },
+   "op": "create",
+   "urn": "urn:pulumi:ci::exp::aws:wafv2/webAclAssociation:WebAclAssociation::assoc"
+  }
+ ]
+}

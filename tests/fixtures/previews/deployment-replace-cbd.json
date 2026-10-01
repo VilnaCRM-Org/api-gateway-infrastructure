@@ -1,0 +1,184 @@
+{
+ "_source": "trimmed from a real offline pulumi 3.223.0 / aws 7.23.0 preview (G3.3 evidence; Pulumi's unknown-value sentinel shown as [unknown]): create-before-delete Deployment replace, --show-replacement-steps",
+ "changeSummary": {
+  "replace": 1,
+  "same": 5,
+  "update": 2
+ },
+ "steps": [
+  {
+   "detailedDiff": null,
+   "newState": {
+    "type": "pulumi:pulumi:Stack"
+   },
+   "oldState": {
+    "type": "pulumi:pulumi:Stack"
+   },
+   "op": "same",
+   "urn": "urn:pulumi:ci::exp::pulumi:pulumi:Stack::exp-ci"
+  },
+  {
+   "detailedDiff": null,
+   "newState": {
+    "inputs": {
+     "__internal": {},
+     "accessKey": "[secret]",
+     "region": "eu-central-1",
+     "secretKey": "[secret]",
+     "skipCredentialsValidation": "true",
+     "skipMetadataApiCheck": "true",
+     "skipRegionValidation": "true",
+     "skipRequestingAccountId": "true",
+     "version": "7.23.0"
+    },
+    "type": "pulumi:providers:aws"
+   },
+   "oldState": {
+    "id": "11111111-2222-3333-4444-555555555555",
+    "inputs": {
+     "accessKey": "pulumi-preview",
+     "region": "eu-central-1",
+     "secretKey": "pulumi-preview",
+     "skipCredentialsValidation": "true",
+     "skipMetadataApiCheck": "true",
+     "skipRegionValidation": "true",
+     "skipRequestingAccountId": "true",
+     "version": "7.23.0"
+    },
+    "type": "pulumi:providers:aws"
+   },
+   "op": "update",
+   "urn": "urn:pulumi:ci::exp::pulumi:providers:aws::aws"
+  },
+  {
+   "detailedDiff": {
+    "triggers.h": {
+     "inputDiff": false,
+     "kind": "update-replace"
+    }
+   },
+   "diffReasons": [
+    "triggers"
+   ],
+   "newState": {
+    "inputs": {
+     "region": "eu-central-1",
+     "restApi": "abc123",
+     "triggers": {
+      "h": "two"
+     }
+    },
+    "type": "aws:apigateway/deployment:Deployment"
+   },
+   "oldState": {
+    "id": "olddep1",
+    "inputs": {
+     "restApi": "abc123",
+     "triggers": {
+      "h": "one"
+     }
+    },
+    "type": "aws:apigateway/deployment:Deployment"
+   },
+   "op": "create-replacement",
+   "replaceReasons": [
+    "triggers"
+   ],
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+  },
+  {
+   "detailedDiff": {
+    "triggers.h": {
+     "inputDiff": false,
+     "kind": "update-replace"
+    }
+   },
+   "diffReasons": [
+    "triggers"
+   ],
+   "newState": {
+    "inputs": {
+     "region": "eu-central-1",
+     "restApi": "abc123",
+     "triggers": {
+      "h": "two"
+     }
+    },
+    "type": "aws:apigateway/deployment:Deployment"
+   },
+   "oldState": {
+    "delete": true,
+    "id": "olddep1",
+    "inputs": {
+     "restApi": "abc123",
+     "triggers": {
+      "h": "one"
+     }
+    },
+    "type": "aws:apigateway/deployment:Deployment"
+   },
+   "op": "replace",
+   "replaceReasons": [
+    "triggers"
+   ],
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+  },
+  {
+   "detailedDiff": {
+    "deployment": {
+     "inputDiff": false,
+     "kind": "update"
+    }
+   },
+   "diffReasons": [
+    "deployment"
+   ],
+   "newState": {
+    "inputs": {
+     "accessLogSettings": {
+      "__defaults": [],
+      "destinationArn": "arn:aws:logs:eu-central-1:123456789012:log-group:/aws/apigateway/api-gateway-infrastructure-ci/access",
+      "format": "{}"
+     },
+     "deployment": "[unknown]",
+     "region": "eu-central-1",
+     "restApi": "abc123",
+     "stageName": "live",
+     "tagsAll": {}
+    },
+    "type": "aws:apigateway/stage:Stage"
+   },
+   "oldState": {
+    "id": "ags-abc123-live",
+    "inputs": {
+     "accessLogSettings": {
+      "destinationArn": "arn:aws:logs:eu-central-1:123456789012:log-group:/aws/apigateway/api-gateway-infrastructure-ci/access",
+      "format": "{}"
+     },
+     "deployment": "olddep1",
+     "restApi": "abc123",
+     "stageName": "live"
+    },
+    "type": "aws:apigateway/stage:Stage"
+   },
+   "op": "update",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/stage:Stage::st"
+  },
+  {
+   "detailedDiff": null,
+   "oldState": {
+    "delete": true,
+    "id": "olddep1",
+    "inputs": {
+     "restApi": "abc123",
+     "triggers": {
+      "h": "one"
+     }
+    },
+    "type": "aws:apigateway/deployment:Deployment"
+   },
+   "op": "delete-replaced",
+   "urn": "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+  }
+ ]
+}
