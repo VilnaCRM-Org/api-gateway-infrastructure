@@ -124,6 +124,14 @@ Every schema pattern ends with `(?!\n)$` (a searched `$` would also accept a tra
 
 The image preinstalls the `aws` resource plugin 7.23.0 (G3.1 hand-off F02): downloaded from the pulumi/pulumi-aws GitHub release, verified against a SHA-256 per architecture equal to the release-asset digest (the release's SHA-1 checksums file matches the same tarballs), installed with `pulumi plugin install --file`, and `PULUMI_DISABLE_AUTOMATIC_PLUGIN_ACQUISITION=true` makes a missing plugin fail instead of downloading. The `ci` stack keeps both feature flags off until G4.1/G5.1 add their modules, so today its Structural Preview registers only the stack.
 
+### Repository controls (G2.2, FR-A07)
+
+`scripts/configure_github_repository_controls.py` is the reviewed definition of the `main` ruleset (no bypass actors, the 19 required checks of AD-A11), the six environments (`test-preview`, `test`, `test-drift`, `prod-preview`, `prod`, `prod-drift`; `main`-only deployment, no administrator bypass, `@Kravalg` the sole reviewer of `test` and `prod` with self-review prevented) and their variables (`AWS_PREVIEW_ROLE_ARN`, `AWS_APPLY_ROLE_ARN`, `AWS_DRIFT_ROLE_ARN` per purpose; `PULUMI_BACKEND_URL` and `PULUMI_SECRETS_PROVIDER` in all three). Account ids, backend URLs and key aliases are read from `pulumi/Pulumi.{test,prod}.yaml`, never from Python.
+
+- Default and `--dry-run` print the payloads without calling GitHub (`--reviewer-id` also skips the user lookup).
+- `--check` reads back the ruleset, environments and variables and exits 1 on any difference; `--readback-file PATH` diffs a saved readback instead.
+- `--apply` needs a repository admin token and is the XP-A3 step (an admin, not CI).
+
 ### Program guardrails and G3.x hand-offs
 
 `pulumi/app/config.py` also refuses a `Pulumi.yaml` with anything beyond `name`, `description` and `runtime: python` (no `main`, `stackConfigDir`, project `config:` or runtime options); every stack sets `pulumi:disable-default-providers: ["*"]`; only the literal YAML booleans `true`/`false` count as booleans; and `pulumi/__main__.py` fails unless the engine's config (`PULUMI_CONFIG`) equals the checked stack file's `config:` mapping. That refuses per-key `PULUMI_CONFIG_<KEY>` overrides and a `--config-file` whose config differs; it does not see a `--config-file` that changes only the top-level `secretsprovider`, `encryptionsalt` or `encryptedkey`, nor the backend in use (hand-off F09).

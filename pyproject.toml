@@ -53,10 +53,13 @@ max-complexity = 10
 # `pulumi/` is the program directory, not the `pulumi` SDK package: without
 # this, ruff sorts `import pulumi` as first-party.
 known-first-party = [
+    "_github_environment_controls",
+    "_github_repository_controls",
     "app",
     "bandit_gate",
     "check_contracts",
     "codeql_sarif_gate",
+    "configure_github_repository_controls",
     "gitleaks_gate",
     "next_release_version",
     "policy",
