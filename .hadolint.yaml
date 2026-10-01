@@ -1,0 +1,8 @@
+# G3.2 `Hadolint` (AD-A11). Any finding at or above `info` fails.
+failure-threshold: info
+ignored:
+  # DL3059 (consecutive RUN): each tool is downloaded and checksum-verified
+  # in its own RUN so a version bump rebuilds and re-verifies only that
+  # layer. The layers sit in the discarded `tooling` stage, so the final
+  # image does not grow.
+  - DL3059

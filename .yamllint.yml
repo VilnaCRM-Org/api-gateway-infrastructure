@@ -1,0 +1,16 @@
+# G3.2 `Yamllint` (AD-A11), ported from user-service-infrastructure.
+# `make test-yaml` runs it with --strict, so warnings fail too.
+extends: default
+
+ignore: |
+  .venv/
+  specs/
+
+rules:
+  # GitHub Actions, Compose and Pulumi files are single-document YAML.
+  document-start: disable
+  # Long `run:` lines, URLs and SHA pins are clearer unwrapped.
+  line-length: disable
+  truthy:
+    # `on:` is a GitHub Actions key, not a boolean.
+    check-keys: false
