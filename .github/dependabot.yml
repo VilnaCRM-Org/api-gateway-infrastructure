@@ -4,6 +4,9 @@ updates:
     directory: '/'
     schedule:
       interval: 'monthly'
+    # zizmor dependabot-cooldown: let a new release age a week first.
+    cooldown:
+      default-days: 7
     reviewers:
       - 'Kravalg'
     groups:
@@ -17,6 +20,9 @@ updates:
     directory: '/'
     schedule:
       interval: 'monthly'
+    # zizmor dependabot-cooldown: let a new release age a week first.
+    cooldown:
+      default-days: 7
     reviewers:
       - 'Kravalg'
     groups:
