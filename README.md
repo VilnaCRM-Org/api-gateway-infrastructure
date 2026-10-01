@@ -47,13 +47,19 @@ test            Run every test under tests/ on the frozen lockfile.
 test-actionlint Actionlint: workflow lint with shellcheck on every run script.
 test-bandit     Bandit: security lint that also fails on stale or malformed nosec comments.
 test-battery    Run every local battery check (CodeQL and Dependency Review run only on GitHub).
+test-contract-schema Contract Schema: the schema and every file under contracts/.
 test-coverage   Coverage: every test under tests/ at 100% branch coverage (NFR-A09).
 test-deps-security Dependency Audit: pip-audit of every package in the frozen uv.lock.
+test-destructive-diff Destructive Diff Gate: no delete or replace of a critical type.
 test-dockerfile Hadolint: Dockerfile lint.
+test-guardrails Run every G3.3 guardrail check.
+test-iam-gate   IAM Gate: no aws:iam/* resource in the plan.
 test-lockfile   Fail when pyproject.toml and uv.lock disagree.
 test-maintainability Maintainability: radon report, xenon complexity gate.
+test-policy     Policy: the CrossGuard pack on the offline `ci` preview, then its fixture tests.
 test-ruff       Ruff: lint and format check of every Python source and test.
 test-secrets    Secrets Scan: gitleaks over every commit reachable from HEAD.
+test-structural-preview Structural Preview: offline `pulumi preview --stack ci`, no credentials, no network.
 test-types      Types: ty static type check of the program, scripts and policy.
 test-yaml       Yamllint: every YAML file, warnings fail.
 test-zizmor     Zizmor (local): workflow security audit, offline audits only.
@@ -84,7 +90,7 @@ Every pull request, forks included, runs the AD-A11 battery checks with `permiss
 | `Hadolint` | `security-scans.yml` | `test-dockerfile` |
 | `CodeQL (python)`, `CodeQL (actions)` | `codeql.yml` | GitHub only |
 
-- **Coverage:** `coverage run -m pytest` over all of `tests/`, then `coverage report` with `fail_under = 100` and branch coverage on `pulumi/` and `scripts/` (`pyproject.toml`). G3.3 adds `policy/`; a test fails until it is listed.
+- **Coverage:** `coverage run -m pytest` over all of `tests/`, then `coverage report` with `fail_under = 100` and branch coverage on `pulumi/`, `scripts/` and `policy/` (`pyproject.toml`); a test pins the list to the source directories.
 - **Bandit:** `scripts/bandit_gate.py` also fails on bandit's `Test in comment` and `nosec encountered` warnings, on a `# nosec` that does not name rule ids, that is not on a one-line statement, or that suppresses nothing. No rule is skipped, except B101 (`assert`) in `tests/`.
 - **CodeQL:** PR jobs cannot hold `security-events: write`, so `analyze` runs with `upload: never` and `scripts/codeql_sarif_gate.py` fails the job on any result in the SARIF output.
 - **Zizmor:** `.github/zizmor.yml` requires a commit-SHA pin for every action (its default would let `actions/*` and `github/*` use a tag), so a tag pin fails `Zizmor` as well as the shape test (FR-A08). In CI the job runs `make test-zizmor-online`, which adds the online audits (`impostor-commit`, `ref-confusion`, `known-vulnerable-actions` and the others) to the offline ones. They use the job's read-only `GITHUB_TOKEN` (`contents: read`), passed as `GH_TOKEN` in that one step's `env` and nowhere else; a fork PR also gets a read-only token, so they run for forks too. The shape test allows `github.token` only there. Locally, `make test-zizmor` runs the offline audits only (no token, no network); `test-zizmor-online` refuses to run without `GH_TOKEN`, because zizmor would otherwise skip the online audits silently. Each SHA pin below was also checked with `git ls-remote` against its upstream tag when it was written.
@@ -100,13 +106,31 @@ Action pins (commit SHA, verified with `git ls-remote` on 2026-10-01):
 | `actions/dependency-review-action` | `v5.0.0` | `a1d282b36b6f3519aa1f3fc636f609c47dddb294` |
 | `github/codeql-action/init`, `/analyze` | `v4.38.2` (annotated tag object `88585263c0627ee42c0e1c5143a112c8d6f4aa18`) | `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2` |
 
+### PR guardrails (G3.3)
+
+`.github/workflows/pulumi-pr-guardrails.yml` adds the five G3.3 required checks (AD-A10, AD-A11, AD-A15, FR-A11). Its jobs follow the battery's shape rules (every PR, forks included, `contents: read`, no secret, `persist-credentials: false`, SHA pins, make-only run steps; `check_guardrails` in `tests/workflow_checks.py`). Each target runs in the `app-offline` compose service, which uses the development image with `network_mode: none` and no AWS variable, so no guardrail can reach AWS, Pulumi Cloud or a plugin download. `make test-guardrails` runs all five.
+
+| Check (job name) | Make target | What it does |
+| --- | --- | --- |
+| `Structural Preview` | `test-structural-preview` | `scripts/run_ci_preview.py`: `pulumi preview --stack ci --json --show-sames --show-replacement-steps` on a fresh local file backend (so the plan is create-only), with the `ci` stack's empty passphrase and an allow-listed environment, then a Markdown summary |
+| `Destructive Diff Gate` | `test-destructive-diff` | `scripts/pulumi_ci_guardrails.py destructive-gate`: fails on `delete`, `replace` or `delete-replaced` of a critical type (the ported BI/USI list plus `aws:apigateway/`, `aws:apigatewayv2/`, `aws:wafv2/`, `aws:acm/`, `aws:cloudwatch/logGroup`). One allowance, no label override: an `aws:apigateway/deployment:Deployment` replacement that is create-before-delete (`create-replacement`, `replace` with the old state marked for a later delete, `delete-replaced` last) while the stage that used the old deployment moves to the new one before the delete |
+| `IAM Gate` | `test-iam-gate` | `pulumi_ci_guardrails.py iam-gate`: fails on any `aws:iam/*` resource in the plan, in any operation |
+| `Policy` | `test-policy` | the CrossGuard pack in `policy/` (`api-gateway-guardrails`, every rule mandatory) on the offline `ci` preview, then its fixture tests (`tests/policies/`) |
+| `Contract Schema` | `test-contract-schema` | `scripts/check_contracts.py`: `contracts/schema/agi-user-service-backend-v1.json` is a valid, closed draft 2020-12 schema, and every other file under `contracts/` is `user-service-backend/{ci,test,prod}.json` and validates against it; passes with only the schema present |
+
+The pack's rules (`policy/guardrails.py`, AD-A10): every REST API sets `disable_execute_api_endpoint`; every stage logs access to the gateway access log group `/aws/apigateway/api-gateway-infrastructure-{env}/access` of the stack; every stage has `*/*` method settings with `logging_level OFF` and throttling above zero (and no method override logs); every stage that a base path mapping references (a mapping without a stage name references every stage of its API) has exactly one web ACL association, while an unmapped stage needs none; every custom domain uses `SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09` and `STRICT`; every log group has a KMS key and a retention; every `VPC_LINK` integration sets `insecure_skip_verification` false; every alarm carries a `runbook` tag; no `aws:ssm/*` resource. A rule that needs a literal fails on a value the preview cannot know yet; a rule that needs a value to be present accepts one; links between resources use the engine's property dependencies. The V-A5 fallback (`TLS_1_2` with a recorded reason) is not accepted yet: where the reason is recorded is for G5.5 to decide, as a reviewed C-policy change.
+
+The contract schema closes USI's `poc-api-gateway-backend/v1` descriptor verbatim (USI `scripts/poc_gateway_backend.py`) under `descriptor`, its `source` (`usi_commit`, `usi_run_url`, `descriptor_sha256`, and the optional `usi_step20_run_url` that FR-A25 requires for TEST, enforced by G5.1 with the stack) and the derived `integration_target`. The cross-field and live checks of FR-A16 belong to the program's contract module (G5.1).
+
+The image preinstalls the `aws` resource plugin 7.23.0 (G3.1 hand-off F02): downloaded from the pulumi/pulumi-aws GitHub release, verified against a SHA-256 per architecture equal to the release-asset digest (the release's SHA-1 checksums file matches the same tarballs), installed with `pulumi plugin install --file`, and `PULUMI_DISABLE_AUTOMATIC_PLUGIN_ACQUISITION=true` makes a missing plugin fail instead of downloading. The `ci` stack keeps both feature flags off until G4.1/G5.1 add their modules, so today its Structural Preview registers only the stack.
+
 ### Program guardrails and G3.x hand-offs
 
 `pulumi/app/config.py` also refuses a `Pulumi.yaml` with anything beyond `name`, `description` and `runtime: python` (no `main`, `stackConfigDir`, project `config:` or runtime options); every stack sets `pulumi:disable-default-providers: ["*"]`; only the literal YAML booleans `true`/`false` count as booleans; and `pulumi/__main__.py` fails unless the engine's config (`PULUMI_CONFIG`) equals the checked stack file's `config:` mapping. That refuses per-key `PULUMI_CONFIG_<KEY>` overrides and a `--config-file` whose config differs; it does not see a `--config-file` that changes only the top-level `secretsprovider`, `encryptionsalt` or `encryptedkey`, nor the backend in use (hand-off F09).
 
 Recorded hand-offs from the G3.1 gate (attempt 1):
 
-- **F02 (before G3.3 / G4.1):** install the `aws` resource plugin 7.23.0 in the image from a pinned URL with a verified SHA-256, so previews never download an unpinned plugin.
+- **F02 (G3.3, done):** the image preinstalls the `aws` resource plugin 7.23.0 from a pinned URL with a verified SHA-256 per architecture, and plugin downloads are disabled, so previews never download an unpinned plugin.
 - **F06 (G3.4):** `test` and `prod` set `skip_metadata_api_check=False` (IMDS credential fallback, as USI does); harmless on GitHub-hosted runners, where the account pin still applies; reconsider if self-hosted EC2 runners are ever used.
 - **F09 (G3.4):** workflows never pass `--config`, `--config-file` or `--secrets-provider`, and preflight checks that `PULUMI_BACKEND_URL` equals the stack's `pulumiBackendUrl` and that the stack's secrets provider equals `pulumiSecretsProvider`.
 - **F07 (G3.2, done):** the 100% branch-coverage gate covers `scripts/` (and `policy/` once G3.3 adds it), and the G3.2 battery replaced the Poetry-era `pulumi/.flake8` and `pulumi/.pre-commit-config.yaml`.
