@@ -108,10 +108,41 @@ def test_non_destructive_ops_pass(op: str) -> None:
     assert destructive({"steps": [step(op, "aws:apigateway/restApi:RestApi")]}) == []
 
 
-def test_destructive_op_on_a_non_critical_type_passes() -> None:
-    """AD-A10 keeps the ported scope: only critical types are blocked."""
-    plan = {"steps": [step("delete", "aws:sns/topic:Topic")]}
-    assert destructive(plan) == []
+NON_CRITICAL = (
+    "aws:sns/topic:Topic",
+    "aws:sns/topicSubscription:TopicSubscription",
+    "aws:cloudwatch/metricAlarm:MetricAlarm",
+    "aws:cloudwatch/logGroup:LogGroup",
+    "aws:wafv2/webAclLoggingConfiguration:WebAclLoggingConfiguration",
+    "pulumi:providers:aws",
+)
+
+
+@pytest.mark.parametrize("op", sorted(gr.DESTRUCTIVE_OPS))
+@pytest.mark.parametrize("type_", NON_CRITICAL)
+def test_n_destructive_op_on_any_type_fails(
+    op: str, type_: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """G33-F01: FR-A11 and AGENTS.md rule 7 block a delete or replace of
+    every type; only the Deployment allowance is exempt."""
+    path = write(tmp_path, {"steps": [step(op, type_)]})
+    assert gr.cli(["destructive-gate", str(path)]) == 1
+    assert f"destructive change blocked: {op} {type_}" in capsys.readouterr().err
+
+
+def test_critical_types_are_only_annotated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plan = {
+        "steps": [
+            step("delete", "aws:sns/topic:Topic"),
+            step("delete", "aws:acm/certificate:Certificate"),
+        ]
+    }
+    assert gr.cli(["destructive-gate", str(write(tmp_path, plan))]) == 1
+    err = capsys.readouterr().err
+    assert "blocked: delete aws:sns/topic:Topic urn:" in err
+    assert "blocked: delete aws:acm/certificate:Certificate (critical type) urn:" in err
 
 
 def test_there_is_no_label_override(tmp_path: Path) -> None:
@@ -198,6 +229,25 @@ def stage_on_other_deployment(steps):
     return steps
 
 
+OTHER_DEPLOYMENT = DEPLOYMENT_URN + "-existing"
+
+
+def stage_moved_to_an_existing_deployment(steps):
+    """G33-F05: away from the old id, but to another, existing deployment."""
+    new = stage_step(steps)["newState"]
+    new["inputs"]["deployment"] = "existingdep"
+    new["propertyDependencies"]["deployment"] = [OTHER_DEPLOYMENT]
+    return steps
+
+
+def stage_moved_to_a_literal_id(steps):
+    """No dependency record and a known id: not the (unknown) replacement."""
+    new = stage_step(steps)["newState"]
+    new["inputs"]["deployment"] = "existingdep"
+    del new["propertyDependencies"]["deployment"]
+    return steps
+
+
 def replace_not_marked_for_delete(steps):
     dep_steps(steps)[1]["oldState"].pop("delete")
     return steps
@@ -241,6 +291,8 @@ def second_stage_stays(steps):
         no_old_id,
         extra_delete,
         second_stage_stays,
+        stage_moved_to_an_existing_deployment,
+        stage_moved_to_a_literal_id,
     ],
 )
 def test_e_deployment_replace_without_every_condition_fails(mutate) -> None:
@@ -333,7 +385,7 @@ def test_summarize(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert "### Pulumi Preview: a" in out
     assert "| delete | 1 |" in out
     assert "Destructive-step count: `1`" in out
-    assert "- `delete` `aws:wafv2/webAcl:WebAcl`" in out
+    assert "- `delete aws:wafv2/webAcl:WebAcl (critical type)`" in out
     assert f"- `{DEPLOYMENT_URN}`" in out
     assert "### Pulumi Preview: b" in out and "| none | 0 |" in out
     assert "IAM resource count: `0`" in out
@@ -386,3 +438,18 @@ def test_e_real_replace_with_show_sames_passes(tmp_path: Path) -> None:
     ]
     assert sames and all("inputs" in s["newState"] for s in sames)
     assert gr.cli(["destructive-gate", str(write(tmp_path, plan))]) == 0
+
+
+def test_e_stage_moved_to_an_unknown_id_without_dependencies_passes() -> None:
+    """Without a dependency record, the engine's unknown sentinel stands for
+    the replacement's id, which only exists after it is created."""
+    steps = cbd_steps()
+    new = stage_step(steps)["newState"]
+    del new["propertyDependencies"]["deployment"]
+    new["inputs"]["deployment"] = gr.UNKNOWN_STRING_VALUE
+    assert gr.allowed_deployment_replacements(steps) == {DEPLOYMENT_URN}
+
+
+def test_real_stage_step_depends_on_the_replacement() -> None:
+    new = stage_step(cbd_steps())["newState"]
+    assert new["propertyDependencies"]["deployment"] == [DEPLOYMENT_URN]

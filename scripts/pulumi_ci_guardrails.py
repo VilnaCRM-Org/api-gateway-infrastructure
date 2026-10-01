@@ -3,13 +3,15 @@
 Ported from the BI/USI `scripts/pulumi_ci_guardrails.py` (AD-A10, AD-A11,
 FR-A11) and adapted to the gateway:
 
-- the destructive gate blocks `delete`, `replace` and `delete-replaced` of a
-  critical type. `CRITICAL_TYPE_PATTERNS` adds `aws:apigateway/`,
-  `aws:apigatewayv2/`, `aws:wafv2/`, `aws:acm/` and `aws:cloudwatch/logGroup`
-  to the ported list. There is one allowance and no label override: an
+- the destructive gate blocks `delete`, `replace` and `delete-replaced` of
+  every resource type (FR-A11; AGENTS.md rule 7: nothing else is exempt).
+  There is one allowance and no label override: an
   `aws:apigateway/deployment:Deployment` may be replaced when the replacement
   is create-before-delete and the stage that used the old deployment moves to
-  the new one in the same plan;
+  the new one in the same plan. `CRITICAL_TYPE_PATTERNS` (the ported list
+  plus AD-A10's `aws:apigateway/`, `aws:apigatewayv2/`, `aws:wafv2/`,
+  `aws:acm/` and `aws:cloudwatch/logGroup`) only marks the findings that touch
+  a critical type in the summary and the gate's report;
 - the IAM gate fails on any `aws:iam/*` resource in the plan. This repository
   declares no IAM (architecture section 4), so the ported Access Analyzer
   validation, which needs AWS credentials, is not ported;
@@ -27,6 +29,8 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+from pulumi_policy.proxy import UNKNOWN_STRING_VALUE
 
 DESTRUCTIVE_OPS = frozenset({"delete", "replace", "delete-replaced"})
 CRITICAL_TYPE_PATTERNS = (
@@ -129,14 +133,32 @@ def _old_deployment_id(steps: Sequence[Mapping[str, Any]]) -> str | None:
     return None
 
 
-def _stage_moves(step: Mapping[str, Any], old_id: str) -> bool:
-    """True when `step` updates a stage away from the deployment `old_id`."""
+def _to_replacement(step: Mapping[str, Any], deployment_urn: str) -> bool:
+    """True when the stage's new `deployment` is the replacement's.
+
+    The engine records which resources an input depends on; when it names
+    any, the replacement must be one of them. Without that record, the new
+    id must still be unknown (the replacement is not created yet). A stage
+    moved to some other, existing deployment fails both.
+    """
+    deps = _state_value(step, "newState", "propertyDependencies", STAGE_DEPLOYMENT_KEY)
+    if isinstance(deps, list) and deps:
+        return deployment_urn in deps
+    new = _state_value(step, "newState", "inputs", STAGE_DEPLOYMENT_KEY)
+    return new == UNKNOWN_STRING_VALUE
+
+
+def _stage_moves(step: Mapping[str, Any], old_id: str, deployment_urn: str) -> bool:
+    """True when `step` updates a stage from `old_id` to the replacement."""
     if step.get("op") != "update" or step_resource_type(step) != STAGE_TYPE:
         return False
     old = _state_value(step, "oldState", "inputs", STAGE_DEPLOYMENT_KEY)
     new = _state_value(step, "newState", "inputs", STAGE_DEPLOYMENT_KEY)
     return (
-        old == old_id and new != old_id and STAGE_DEPLOYMENT_KEY in _changed_keys(step)
+        old == old_id
+        and new != old_id
+        and STAGE_DEPLOYMENT_KEY in _changed_keys(step)
+        and _to_replacement(step, deployment_urn)
     )
 
 
@@ -175,9 +197,10 @@ def allowed_deployment_replacements(steps: Sequence[Mapping[str, Any]]) -> set[s
     A replacement passes only when its steps are exactly
     `create-replacement`, `replace`, `delete-replaced` in that order (create
     before delete), the `replace` step marks the old state for a later
-    delete, a stage that used the old deployment is updated to a new
-    deployment in the same plan, before the old deployment is deleted, and
-    no stage of the plan stays on the old deployment.
+    delete, a stage that used the old deployment is updated to the new
+    deployment (an input that depends on the replacement, or is still
+    unknown) in the same plan, before the old deployment is deleted, and no
+    stage of the plan stays on the old deployment.
     """
     allowed: set[str] = set()
     for urn, indexed in _deployment_steps(steps).items():
@@ -185,22 +208,26 @@ def allowed_deployment_replacements(steps: Sequence[Mapping[str, Any]]) -> set[s
         if replacement is None:
             continue
         old_id, delete_index = replacement
-        moved = any(_stage_moves(step, old_id) for step in steps[:delete_index])
+        moved = any(_stage_moves(s, old_id, urn) for s in steps[:delete_index])
         if moved and not any(_stage_stays(step, old_id) for step in steps):
             allowed.add(urn)
     return allowed
 
 
 def find_destructive_steps(steps: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return destructive steps on critical types, minus the one allowance."""
+    """Return every destructive step of any type, minus the one allowance."""
     allowed = allowed_deployment_replacements(steps)
     return [
         step
         for step in steps
-        if step.get("op") in DESTRUCTIVE_OPS
-        and _is_critical(step_resource_type(step))
-        and str(step.get("urn", "")) not in allowed
+        if step.get("op") in DESTRUCTIVE_OPS and str(step.get("urn", "")) not in allowed
     ]
+
+
+def _describe(step: Mapping[str, Any]) -> str:
+    resource_type = step_resource_type(step)
+    critical = " (critical type)" if _is_critical(resource_type) else ""
+    return f"{step.get('op')} {resource_type}{critical}"
 
 
 def find_iam_steps(steps: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -230,9 +257,8 @@ def summarize_preview(path: Path, *, stack: str | None = None) -> str:
     destructive = find_destructive_steps(steps)
     lines.extend(["", f"Destructive-step count: `{len(destructive)}`"])
     if destructive:
-        lines.extend(["", "Critical destructive candidates:"])
-        for step in destructive:
-            lines.append(f"- `{step.get('op')}` `{step_resource_type(step)}`")
+        lines.extend(["", "Blocked destructive steps:"])
+        lines.extend(f"- `{_describe(step)}`" for step in destructive)
     allowed = sorted(allowed_deployment_replacements(steps))
     if allowed:
         lines.extend(["", "Allowed create-before-delete Deployment replacements:"])
@@ -274,9 +300,7 @@ def _gate(preview_files: Sequence[Path], finder: Any) -> list[str]:
     findings: list[str] = []
     for preview_file in files:
         for step in finder(preview_steps(load_preview(preview_file))):
-            findings.append(
-                f"{step.get('op')} {step_resource_type(step)} {step.get('urn', '')}"
-            )
+            findings.append(f"{_describe(step)} {step.get('urn', '')}")
     return findings
 
 

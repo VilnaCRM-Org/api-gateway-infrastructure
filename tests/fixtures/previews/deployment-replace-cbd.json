@@ -31,6 +31,7 @@
      "skipRequestingAccountId": "true",
      "version": "7.23.0"
     },
+    "propertyDependencies": {},
     "type": "pulumi:providers:aws"
    },
    "oldState": {
@@ -68,6 +69,11 @@
       "h": "two"
      }
     },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
+    },
     "type": "aws:apigateway/deployment:Deployment"
    },
    "oldState": {
@@ -77,6 +83,11 @@
      "triggers": {
       "h": "one"
      }
+    },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/deployment:Deployment"
    },
@@ -104,6 +115,11 @@
       "h": "two"
      }
     },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
+    },
     "type": "aws:apigateway/deployment:Deployment"
    },
    "oldState": {
@@ -114,6 +130,11 @@
      "triggers": {
       "h": "one"
      }
+    },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/deployment:Deployment"
    },
@@ -146,6 +167,17 @@
      "stageName": "live",
      "tagsAll": {}
     },
+    "propertyDependencies": {
+     "accessLogSettings": [
+      "urn:pulumi:ci::exp::aws:cloudwatch/logGroup:LogGroup::lg"
+     ],
+     "deployment": [
+      "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+     ],
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
+    },
     "type": "aws:apigateway/stage:Stage"
    },
    "oldState": {
@@ -158,6 +190,17 @@
      "deployment": "olddep1",
      "restApi": "abc123",
      "stageName": "live"
+    },
+    "propertyDependencies": {
+     "accessLogSettings": [
+      "urn:pulumi:ci::exp::aws:cloudwatch/logGroup:LogGroup::lg"
+     ],
+     "deployment": [
+      "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+     ],
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/stage:Stage"
    },
@@ -174,6 +217,11 @@
      "triggers": {
       "h": "one"
      }
+    },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/deployment:Deployment"
    },

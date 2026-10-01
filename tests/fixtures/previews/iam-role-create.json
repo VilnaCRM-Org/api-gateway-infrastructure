@@ -26,6 +26,7 @@
      "skipRequestingAccountId": "true",
      "version": "7.23.0"
     },
+    "propertyDependencies": {},
     "type": "pulumi:providers:aws"
    },
    "op": "create",
@@ -41,6 +42,7 @@
      "region": "eu-central-1",
      "tagsAll": {}
     },
+    "propertyDependencies": {},
     "type": "aws:apigateway/restApi:RestApi"
    },
    "op": "create",
@@ -61,6 +63,7 @@
      ],
      "tagsAll": {}
     },
+    "propertyDependencies": {},
     "type": "aws:apigatewayv2/vpcLink:VpcLink"
    },
    "op": "create",
@@ -77,6 +80,7 @@
      "skipDestroy": false,
      "tagsAll": {}
     },
+    "propertyDependencies": {},
     "type": "aws:cloudwatch/logGroup:LogGroup"
    },
    "op": "create",
@@ -93,6 +97,7 @@
      "skipDestroy": false,
      "tagsAll": {}
     },
+    "propertyDependencies": {},
     "type": "aws:cloudwatch/logGroup:LogGroup"
    },
    "op": "create",
@@ -119,6 +124,7 @@
       "sampledRequestsEnabled": true
      }
     },
+    "propertyDependencies": {},
     "type": "aws:wafv2/webAcl:WebAcl"
    },
    "op": "create",
@@ -135,6 +141,7 @@
      "path": "/",
      "tagsAll": {}
     },
+    "propertyDependencies": {},
     "type": "aws:iam/role:Role"
    },
    "op": "create",
@@ -155,6 +162,7 @@
      "securityPolicy": "SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09",
      "tagsAll": {}
     },
+    "propertyDependencies": {},
     "type": "aws:apigateway/domainName:DomainName"
    },
    "op": "create",
@@ -182,6 +190,7 @@
      "threshold": 1,
      "treatMissingData": "missing"
     },
+    "propertyDependencies": {},
     "type": "aws:cloudwatch/metricAlarm:MetricAlarm"
    },
    "op": "create",
@@ -197,6 +206,14 @@
      "region": "eu-central-1",
      "resourceId": "[unknown]",
      "restApi": "[unknown]"
+    },
+    "propertyDependencies": {
+     "resourceId": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ],
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/method:Method"
    },
@@ -223,6 +240,20 @@
      "type": "HTTP_PROXY",
      "uri": "https://user.example.com/"
     },
+    "propertyDependencies": {
+     "connectionId": [
+      "urn:pulumi:ci::exp::aws:apigatewayv2/vpcLink:VpcLink::link"
+     ],
+     "httpMethod": [
+      "urn:pulumi:ci::exp::aws:apigateway/method:Method::m"
+     ],
+     "resourceId": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ],
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
+    },
     "type": "aws:apigateway/integration:Integration"
    },
    "op": "create",
@@ -237,6 +268,11 @@
      "triggers": {
       "h": "one"
      }
+    },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/deployment:Deployment"
    },
@@ -257,6 +293,17 @@
      "restApi": "[unknown]",
      "stageName": "live",
      "tagsAll": {}
+    },
+    "propertyDependencies": {
+     "accessLogSettings": [
+      "urn:pulumi:ci::exp::aws:cloudwatch/logGroup:LogGroup::lg"
+     ],
+     "deployment": [
+      "urn:pulumi:ci::exp::aws:apigateway/deployment:Deployment::dep"
+     ],
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ]
     },
     "type": "aws:apigateway/stage:Stage"
    },
@@ -279,6 +326,14 @@
      },
      "stageName": "live"
     },
+    "propertyDependencies": {
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ],
+     "stageName": [
+      "urn:pulumi:ci::exp::aws:apigateway/stage:Stage::st"
+     ]
+    },
     "type": "aws:apigateway/methodSettings:MethodSettings"
    },
    "op": "create",
@@ -293,6 +348,17 @@
      "restApi": "[unknown]",
      "stageName": "live"
     },
+    "propertyDependencies": {
+     "domainName": [
+      "urn:pulumi:ci::exp::aws:apigateway/domainName:DomainName::d"
+     ],
+     "restApi": [
+      "urn:pulumi:ci::exp::aws:apigateway/restApi:RestApi::api"
+     ],
+     "stageName": [
+      "urn:pulumi:ci::exp::aws:apigateway/stage:Stage::st"
+     ]
+    },
     "type": "aws:apigateway/basePathMapping:BasePathMapping"
    },
    "op": "create",
@@ -305,6 +371,14 @@
      "region": "eu-central-1",
      "resourceArn": "[unknown]",
      "webAclArn": "[unknown]"
+    },
+    "propertyDependencies": {
+     "resourceArn": [
+      "urn:pulumi:ci::exp::aws:apigateway/stage:Stage::st"
+     ],
+     "webAclArn": [
+      "urn:pulumi:ci::exp::aws:wafv2/webAcl:WebAcl::acl"
+     ]
     },
     "type": "aws:wafv2/webAclAssociation:WebAclAssociation"
    },
