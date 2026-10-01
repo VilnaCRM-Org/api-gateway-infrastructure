@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agi-user-service-backend/v1",
+  "description": "The gateway's pin of the user-service backend (FR-A16, FR-A25, AD-A3): the USI poc-api-gateway-backend/v1 descriptor verbatim, its source, and the derived integration_target. Closed at every level. Every pattern ends with (?!\\n)$, because JSON Schema patterns are searched and $ would also match before a trailing newline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "descriptor",
+    "source",
+    "integration_target"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agi-user-service-backend/v1"
+    },
+    "descriptor": {
+      "description": "USI poc-api-gateway-backend/v1, verbatim (USI scripts/poc_gateway_backend.py project_gateway_backend; specs/poc-api-gateway-backend.md).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "account_id",
+        "region",
+        "integration_type",
+        "connection_type",
+        "listener_arn",
+        "vpc_id",
+        "subnet_ids",
+        "alb_security_group_id",
+        "vpc_link_security_group_id",
+        "tls_server_name",
+        "certificate_arn",
+        "request_parameters"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "poc-api-gateway-backend/v1"
+        },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[0-9]{12}(?!\\n)$"
+        },
+        "region": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(?:-[a-z]+)+-[0-9]+(?!\\n)$"
+        },
+        "integration_type": {
+          "const": "HTTP_PROXY"
+        },
+        "connection_type": {
+          "const": "VPC_LINK"
+        },
+        "listener_arn": {
+          "type": "string",
+          "pattern": "^arn:aws:elasticloadbalancing:[a-z]{2}(?:-[a-z]+)+-[0-9]+:[0-9]{12}:listener/app/[a-zA-Z0-9-]{1,32}/[0-9a-f]{16}/[0-9a-f]{16}(?!\\n)$"
+        },
+        "vpc_id": {
+          "type": "string",
+          "pattern": "^vpc-[0-9a-f]{8}(?:[0-9a-f]{9})?(?!\\n)$"
+        },
+        "subnet_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^subnet-[0-9a-f]{8}(?:[0-9a-f]{9})?(?!\\n)$"
+          }
+        },
+        "alb_security_group_id": {
+          "type": "string",
+          "pattern": "^sg-[0-9a-f]{8}(?:[0-9a-f]{9})?(?!\\n)$"
+        },
+        "vpc_link_security_group_id": {
+          "type": "string",
+          "pattern": "^sg-[0-9a-f]{8}(?:[0-9a-f]{9})?(?!\\n)$"
+        },
+        "tls_server_name": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}(?!\\n)$"
+        },
+        "certificate_arn": {
+          "type": "string",
+          "pattern": "^arn:aws:acm:[a-z]{2}(?:-[a-z]+)+-[0-9]+:[0-9]{12}:certificate/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?!\\n)$"
+        },
+        "request_parameters": {
+          "const": {
+            "overwrite:path": "$request.path"
+          }
+        }
+      }
+    },
+    "source": {
+      "description": "Where the descriptor came from (FR-A16), and for TEST the USI S4.6 step-20 run (FR-A25).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "usi_commit",
+        "usi_run_url",
+        "descriptor_sha256"
+      ],
+      "properties": {
+        "usi_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}(?!\\n)$"
+        },
+        "usi_run_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/VilnaCRM-Org/user-service-infrastructure/actions/runs/[1-9][0-9]*(?:/attempts/[1-9][0-9]*)?(?!\\n)$"
+        },
+        "descriptor_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}(?!\\n)$"
+        },
+        "usi_step20_run_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/VilnaCRM-Org/user-service-infrastructure/actions/runs/[1-9][0-9]*(?:/attempts/[1-9][0-9]*)?(?!\\n)$"
+        }
+      }
+    },
+    "integration_target": {
+      "description": "The load balancer ARN derived from descriptor.listener_arn (AD-A3, GA-1).",
+      "type": "string",
+      "pattern": "^arn:aws:elasticloadbalancing:[a-z]{2}(?:-[a-z]+)+-[0-9]+:[0-9]{12}:loadbalancer/app/[a-zA-Z0-9-]{1,32}/[0-9a-f]{16}(?!\\n)$"
+    }
+  }
+}

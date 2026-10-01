@@ -1,7 +1,9 @@
 """Fail-closed checks for GitHub workflow and composite-action files.
 
 G2.1 added the shape checks; G3.2 adds the PR quality battery checks
-(``check_battery``) and the G2.1 hand-offs F-34 (pinned autorelease
+(``check_battery``); G3.3 applies the same rules to the guardrail workflow
+(``check_guardrails``) with its own make-target allow-list; and the G2.1
+hand-offs F-34 (pinned autorelease
 ``concurrency``, checkout ``with`` and ``if`` values), F-35 (``&``, ``<``
 and ``>`` in autorelease run commands) and F-36 (whitespace forms of
 ``secrets`` and non-core YAML tags).
@@ -480,7 +482,7 @@ def _battery_checkout(where, step, v):
         v.append(f"{where}: checkout fetch-depth may only be 0")
 
 
-def _battery_step(where, step, v, token_step=False):
+def _battery_step(where, step, v, token_step=False, allowed=BATTERY_RUN):
     uses = str(step.get("uses", ""))
     if uses.startswith("actions/checkout@"):
         _battery_checkout(where, step, v)
@@ -492,14 +494,14 @@ def _battery_step(where, step, v, token_step=False):
     if "${{" in str(run):
         v.append(f"{where}: run must not interpolate expressions")
     for cmd in commands(run):
-        if not BATTERY_RUN.match(cmd):
+        if not allowed.match(cmd):
             v.append(f"{where}: run command not on the battery allow list: {cmd!r}")
 
 
-def check_battery(text):
+def check_battery(text, allowed=BATTERY_RUN):
     """Shape rules for the battery workflows (python-quality, security-scans,
     codeql): every job is unprivileged, secret-free and runs only make
-    targets or the SARIF gate."""
+    targets or the SARIF gate. `allowed` is the run-command allow-list."""
     v = check_workflow(text)
     doc = load(text, [])
     if doc is None:
@@ -515,8 +517,27 @@ def check_battery(text):
             v.append(f"job {name}: needs a check name")
         for i, step in enumerate(_steps(job)):
             token_step = _is_zizmor_online_step(job, step)
-            _battery_step(f"job {name} step {i}", step, v, token_step)
+            _battery_step(f"job {name} step {i}", step, v, token_step, allowed)
     return v
+
+
+# --- PR guardrails (G3.3, AD-A10, AD-A11, AD-A15, FR-A11) ------------------
+
+# The guardrail workflow runs only these make targets: the image build and
+# one target per required check. No SARIF gate and no other command.
+GUARDRAIL_RUN = re.compile(
+    r"^make (build|test-structural-preview|test-destructive-diff|test-iam-gate"
+    r"|test-policy|test-contract-schema)$"
+)
+
+
+def check_guardrails(text):
+    """The battery's shape rules with the guardrail allow-list: every job
+    runs on every pull request, unprivileged and secret-free, with
+    `persist-credentials: false`, SHA pins and make-only run steps. The
+    battery's one token exception (the Zizmor online step) cannot apply,
+    because its command is not on this allow-list."""
+    return check_battery(text, GUARDRAIL_RUN)
 
 
 def job_check_names(text):

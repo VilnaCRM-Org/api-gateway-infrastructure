@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   app:
+    image: "${DEV_IMAGE:-api-gateway-infrastructure-dev:local}"
     build:
       context: .
       dockerfile: Dockerfile
@@ -18,3 +19,14 @@ services:
       - AWS_REGION
     tty: true
     stdin_open: true
+
+  # G3.3 guardrails (AD-A15): the same image with no network and no AWS
+  # variable, so the Structural Preview and the gates that read it can reach
+  # neither AWS nor Pulumi Cloud, and use only the preinstalled plugin.
+  app-offline:
+    image: "${DEV_IMAGE:-api-gateway-infrastructure-dev:local}"
+    pull_policy: never
+    network_mode: none
+    volumes:
+      - .:/workspace
+    working_dir: /workspace

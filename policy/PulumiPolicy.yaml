@@ -1,0 +1,4 @@
+# G3.3 CrossGuard pack (AD-A10). It runs on the image's uv environment
+# (PULUMI_PYTHON_CMD), which pins pulumi-policy in uv.lock.
+description: API gateway guardrails (AD-A10)
+runtime: python

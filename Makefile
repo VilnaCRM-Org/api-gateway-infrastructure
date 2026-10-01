@@ -12,6 +12,9 @@ SERVICE        = app
 RUN            = $(DOCKER_COMPOSE) run --rm $(SERVICE)
 # Passes the caller's GH_TOKEN by name; used only by test-zizmor-online.
 RUN_GH         = $(DOCKER_COMPOSE) run --rm -e GH_TOKEN $(SERVICE)
+# G3.3 guardrails: the same image with no network and no AWS variable.
+OFFLINE        = app-offline
+RUN_OFFLINE    = $(DOCKER_COMPOSE) run --rm $(OFFLINE)
 
 # Misc
 .DEFAULT_GOAL  = help
@@ -19,7 +22,9 @@ RUN_GH         = $(DOCKER_COMPOSE) run --rm -e GH_TOKEN $(SERVICE)
 .PHONY: help build start up down sh test test-lockfile clean test-battery \
         test-ruff test-types test-maintainability test-coverage test-bandit \
         test-deps-security test-secrets test-actionlint test-zizmor test-yaml \
-        test-dockerfile test-zizmor-online
+        test-dockerfile test-zizmor-online test-guardrails \
+        test-structural-preview test-destructive-diff test-iam-gate \
+        test-policy test-contract-schema
 
 # G3.2 PR quality battery (AD-A11, FR-A10). Each target is one required check
 # and runs inside the development image, exactly as CI runs it. NFR-A09
@@ -86,8 +91,12 @@ test-deps-security: ## Dependency Audit: pip-audit of every package in the froze
 	$(RUN) bash -o pipefail -c 'uv export --frozen --all-groups --no-emit-project --format requirements-txt --output-file /tmp/requirements.txt >/dev/null \
 		&& uv run --frozen pip-audit --strict --disable-pip --require-hashes --requirement /tmp/requirements.txt'
 
+# scripts/gitleaks_gate.py runs `gitleaks git --log-opts=HEAD` only after git
+# resolves HEAD in the same container, and fails on an empty scan: gitleaks
+# alone exits 0 with "0 commits scanned" when it cannot read the repository
+# (for example a git worktree whose main .git is not mounted).
 test-secrets: ## Secrets Scan: gitleaks over every commit reachable from HEAD.
-	$(RUN) gitleaks git --no-banner --redact --verbose --log-opts=HEAD .
+	$(RUN) uv run --frozen python scripts/gitleaks_gate.py .
 
 test-actionlint: ## Actionlint: workflow lint with shellcheck on every run script.
 	$(RUN) actionlint -verbose
@@ -111,3 +120,31 @@ test-yaml: ## Yamllint: every YAML file, warnings fail.
 
 test-dockerfile: ## Hadolint: Dockerfile lint.
 	$(RUN) hadolint --config .hadolint.yaml Dockerfile
+
+# G3.3 guardrails (AD-A10, AD-A11, AD-A15, FR-A11). Each target is one
+# required check. They run in the app-offline service, so no target can reach
+# AWS, Pulumi Cloud or a plugin download: the preview uses a fresh local file
+# backend, the `ci` stack's empty passphrase and the image's preinstalled
+# `aws` plugin. A gate re-runs the preview it reads, so each CI job stands
+# alone; one `make test-guardrails` runs it once.
+CI_PREVIEW = .artifacts/pulumi-preview/ci.json
+GUARDRAILS = uv run --frozen python scripts/pulumi_ci_guardrails.py
+
+test-guardrails: test-structural-preview test-destructive-diff test-iam-gate test-policy test-contract-schema ## Run every G3.3 guardrail check.
+
+test-structural-preview: ## Structural Preview: offline `pulumi preview --stack ci`, no credentials, no network.
+	$(RUN_OFFLINE) uv run --frozen python scripts/run_ci_preview.py --json-output $(CI_PREVIEW)
+	$(RUN_OFFLINE) $(GUARDRAILS) summarize $(CI_PREVIEW)
+
+test-destructive-diff: test-structural-preview ## Destructive Diff Gate: no delete or replace of a critical type.
+	$(RUN_OFFLINE) $(GUARDRAILS) destructive-gate $(CI_PREVIEW)
+
+test-iam-gate: test-structural-preview ## IAM Gate: no aws:iam/* resource in the plan.
+	$(RUN_OFFLINE) $(GUARDRAILS) iam-gate $(CI_PREVIEW)
+
+test-policy: ## Policy: the CrossGuard pack on the offline `ci` preview, then its fixture tests.
+	$(RUN_OFFLINE) uv run --frozen python scripts/run_ci_preview.py --policy-pack policy
+	$(RUN_OFFLINE) uv run --frozen pytest tests/policies
+
+test-contract-schema: ## Contract Schema: the schema and every file under contracts/.
+	$(RUN_OFFLINE) uv run --frozen python scripts/check_contracts.py contracts
