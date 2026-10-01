@@ -1,39 +1,39 @@
-name: Generate Changelog and Create Release
+name: Tag and Release
 
+# PD-11: tag and release only. No commit to main, no App token, no secret
+# other than the job's short-lived GITHUB_TOKEN. CHANGELOG.md is no longer
+# written by this workflow; release notes are generated on the GitHub release.
 on:
   push:
     branches:
       - main
 
+concurrency:
+  group: autorelease
+  cancel-in-progress: false
+
+permissions: {}
+
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
-      - name: Generate token
-        id: generate_token
-        uses: tibdex/github-app-token@v1
-        with:
-          app_id: ${{ secrets.VILNACRM_APP_ID }}
-          private_key: ${{ secrets.VILNACRM_APP_PRIVATE_KEY }}
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          token: ${{ steps.generate_token.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Conventional Changelog Action
-        id: changelog
-        uses: TriPSs/conventional-changelog-action@v5
-        with:
-          github-token: ${{ steps.generate_token.outputs.token }}
-          output-file: "CHANGELOG.md"
-          version-file: "pulumi/pyproject.toml"
-      - name: Create Release
-        uses: actions/create-release@v1
-        if: ${{ steps.changelog.outputs.skipped == 'false' }}
+      - name: Compute next version from conventional commits
+        id: version
+        run: python3 scripts/next_release_version.py
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.skipped == 'false'
         env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
-        with:
-          tag_name: ${{ steps.changelog.outputs.tag }}
-          release_name: ${{ steps.changelog.outputs.tag }}
-          body: ${{ steps.changelog.outputs.clean_changelog }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
