@@ -11,7 +11,7 @@ This file is the execution ledger. It is not a planning input.
 | Worktree | wt-agi-plan |
 | Branch | feat/gateway-wa-plan |
 | Source baseline | f056c8b32c64e502101ec573191d8f229881bc7a (origin/main) |
-| Bundle revision | 4 (user decision D-A11 of 2026-10-01; revision 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`) |
+| Bundle revision | 5 (readiness round 1 at `3913ccb`: FAIL; F1-F13 resolved; revisions 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`, 4 `3913ccb`) |
 | Specs directory | `specs/gateway-wa-plan/` |
 | Target | pulumi (Python Pulumi), stacks test and prod |
 | Environment | none selected; planning is offline |
@@ -23,7 +23,7 @@ This file is the execution ledger. It is not a planning input.
 | --- | --- |
 | bmalph | 2.11.0 (`~/.local/bin/bmalph --version`) |
 | BMAD workflows | read from `wt-usi-hardening/_bmad` (`_bmad/COMMANDS.md` sha256 `da2f78200b2b0a77e4a6db87a6f30de55200fb7494b697301e72387e1757c722`, the same file the USI run used). `bmalph init` was **not** run in this worktree, so that only `specs/` changes; no `_bmad/`, `.ralph/`, `bmalph/` or `CLAUDE.md` was created. |
-| devops-sdlc profile | absent for this repository (XP-A13) |
+| devops-sdlc profile | absent for this repository (XP-A13); `attempts.json` absent (no implementation attempt recorded) |
 
 ## Scope limits
 
@@ -94,6 +94,24 @@ This file is the execution ledger. It is not a planning input.
     Every claim used was re-read at the cited lines, and one claim was
     corrected: the #285 recon recommended an independent stack, which D-A1
     rejects as the route.
+- **Revision 5, readiness round 1 (all read only):**
+  - BI `wt-boot-urllib3` (origin/main proxy for `bea5252`):
+    - `pulumi/infra/pulumi_state.py` lines 255-275 (replica names);
+    - `pulumi/infra/governance_automation.py` lines 266-272;
+    - `pulumi/infra/governance.py` lines 965-975 and 1030-1037;
+    - `pulumi/governance/Pulumi.test.yaml` lines 15-25;
+    - `pulumi/infra/bootstrap_infrastructure.py` lines 18-30;
+    - `pulumi/infra/logging_bucket.py` (function list);
+    - `AGENTS.md` lines 95-105;
+    - `tests/unit/test_poc_installation_boundary.py` lines 60-80;
+    - a grep of the count pins in `scripts/operator_seed_installation.py`.
+  - USI `wt-usi-hardening`:
+    - `specs/workload-wa-hardening/architecture.md` lines 2762-2778 (the
+      C-BI seed order);
+    - the ordered rows 8-43 and lines 2900-2908 of `epics-stories.md`;
+    - `.github/workflows/pulumi-pr-guardrails.yml` lines 25-40.
+  - Sizes were re-rendered with `evidence/render_governance_sizes.py`
+    from `wt-boot-urllib3/pulumi` and `wt-boot-pr280/pulumi`.
 - **SDK:** `pulumi_aws` 7.23.0 in `wt-boot-219/.venv` (grep of
   `apigateway/integration.py`, `domain_name.py`, `rest_api.py`).
 - **AWS documentation** (aws-knowledge MCP, 2026-10-01): the pages listed
@@ -104,20 +122,20 @@ This file is the execution ledger. It is not a planning input.
   the governance runbook needs only a catalog entry; GR-12 shows the seed
   guards block it).
 
-## Artifacts (sha256, revision 4)
+## Artifacts (sha256, revision 5)
 
 `run-summary.md` is not hashed here, because it contains the hashes. Check
 with `sha256sum -c` over the block below, from `specs/gateway-wa-plan/`.
 
 ```
-07889d5ba057222ebd3999a45c677f16f2635b05421e91f4e58680b83024215a  research.md
-478e2b7bf5db68fe3c17e52efdc2620b62232fd1c53de04e032d35ab5a1b13fc  brief.md
-f34e89b3b217b212139ddfe6748c26f50574a3c394f5757e5600d8c4e27a1c12  prd.md
-b135b7a5aee72d0345784017c9edba388bd8d0ae123f0ae9f7e75379658f1766  architecture.md
-623abb3390223cb8dad33e32fc9980142c73772c7f5eaa9d7f8047142f1493ca  epics-stories.md
-392a5b0568b342c533aa7f8e23f74fad2be5939b2bc3b935e9abc8304aef6b97  decisions.md
-7ab5dec9931cd4b811612a06a90fb9cb4744593f2b8531a723b37f50c7214941  readiness.md
-5949530bc4f75924803efa50192d2ce05f7464cc879b0fd3b5621f50dcfd53d5  evidence/render_governance_sizes.py
+046e8421d35ab03f49a6be8d80923347404e1482637d9866b139608e8374c0ad  research.md
+387039d33cd78c13a33a4b72e51e50362d9f0971f801cbbf0c5d6552188f3b22  brief.md
+09eb1cffc76ce52878b0821a434dd039419f3243d125613abc02887901544539  prd.md
+a9927a2057beb19e92c9f2023243bde0c69a56db6fc8080c50f3d0f5f68d5e5e  architecture.md
+1cdc6aed0bc6cfdc5dab8ca808bfeb98dd81631a6728fc4319adf9edfaa6eb64  epics-stories.md
+a67bfe73d858c7eb6b47308ae0dd2bd97acd1e21238fa0e228ad436e95b0ca8c  decisions.md
+5294fd53ed1bf8132b539b764c6dd8eef55c902edc638e28bc90a18d0e621428  readiness.md
+9c70e4768a4771214a165df308ccb501e8432397d3552d3cf9bcee7f7d5ed981  evidence/render_governance_sizes.py
 ```
 
 ## Gates
@@ -132,6 +150,9 @@ b135b7a5aee72d0345784017c9edba388bd8d0ae123f0ae9f7e75379658f1766  architecture.m
 | Revision 3 recheck | REFUTED narrowly: 4 of 5 fixed, #4 partly; new N1 (minor), N2 (nit); all folded in; no third round |
 | Revision 4 pre-commit audit (`claude-router:audit`) | REFUTED: 1 major (lock deny outside `governance/`), 2 medium, 2 low, 1 nit; all folded in |
 | Revision 4 recheck | REFUTED narrowly: 5 of 6 fixed, #4 partly; new N1 (medium, apply-role wiring); folded in; no third round |
+| Independent readiness round 1 (on `3913ccb`, BI baseline `bea5252`) | FAIL: 3 major, 5 medium, lows, nits, 1 process; resolved in revision 5 |
+| Revision 5 pre-commit audit (`claude-router:audit`) | REFUTED narrowly: 3 P2, 2 P3, 4 nits; all folded in |
+| Revision 5 recheck | REFUTED narrowly: 2 of 6 fixed, 4 partly (apply mechanism per BI runner, row-8 cross-plan order, exact-ARN wording, ci provider in PRD); all folded in; no third round |
 | Independent readiness round | not run yet |
 
 ## Report summary
@@ -161,5 +182,6 @@ b135b7a5aee72d0345784017c9edba388bd8d0ae123f0ae9f7e75379658f1766  architecture.m
 - **Open user questions:** none. Cross-plan request to USI: CR-A1.
 - **Counts per environment:** 30 principals, 9 seed-created, 67 seed
   policies. Measured sizes (`evidence/render_governance_sizes.py`):
-  dedicated governance Apply ceiling 5866, its guard 3867, its identity
-  5866, shared Preview/Drift ceilings 5104/5114 (TEST/PROD), all ≤ 6144.
+  dedicated governance Apply ceiling 5737, its identity 5737, its guard
+  5198, shared Preview/Drift ceilings 5419/5429 (TEST/PROD), all ≤ 6144
+  (revision 5).

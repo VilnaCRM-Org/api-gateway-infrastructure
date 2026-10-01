@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-create-epics-and-stories (Creat
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 4 (2026-10-01: D-A11 dedicated governance Apply role; D-A9 admission re-scoped; OQ-11 closed, rows unblocked)
+revision: 5 (2026-10-01: readiness round 1 findings F1-F13 resolved)
 inputDocuments: [prd.md, architecture.md, decisions.md]
 ---
 
@@ -138,9 +138,11 @@ ConfigRead roles.
 
 ### G1.1 (BI): Gateway seed enrolment packet (source only)
 
-- **Needs:** D-A1, D-A9, D-A10, D-A11; V-A10 (the BI owner's review);
-  V-A12 (every new or amended ceiling, guard and identity ≤ 6144, measured
-  in AD-A1).
+- **Needs:** D-A1, D-A9, D-A10, D-A11; V-A10 (the BI owner reverses
+  origin/main's documented rule against extending the seed inventory,
+  **before** any G1.1 code; AD-A1); V-A12 (every new or amended ceiling,
+  guard and identity ≤ 6144, measured in AD-A1); V-A13 (the shared
+  Preview/Drift ceilings re-rendered against the row-34 result catalog).
 - **Files:**
   - `pulumi/seed/gateway_enrollment_amendment.py` and its manifest (new,
     modelled on `test_poc_prerequisite_amendment.py` and
@@ -153,7 +155,18 @@ ConfigRead roles.
     (proposed name) for the window between CREATE and activation; exact
     active-trust verification; attachment rules; AD-A1);
   - tests (`tests/unit/test_seed_policy_registry.py` and a new
-    `tests/unit/test_gateway_seed_amendment.py`).
+    `tests/unit/test_gateway_seed_amendment.py`);
+  - the origin/main files that today enforce the opposite rule (readiness
+    F7). Each changes only after V-A10:
+    - `tests/unit/test_poc_installation_boundary.py` (lines 63-79 pin 55
+      policies, 24 principals and 58 resources);
+    - `specs/219-test-workload-capability/installability-stop.md` (lines
+      33-39);
+    - the hard-coded counts in `scripts/operator_seed_installation.py`
+      (lines 165, 204, 209, 462, 517, 542);
+  - `scripts/operator_seed_observation.py`, which exists only with #284
+    (`wt-boot-pr280` lines 185 and 219), for the new kind's `--active`
+    and mixed-phase modes.
 - **Work:** AD-A1's source packet. The packet renders, per environment, the
   candidate result catalog and the candidate seed template. Their contents:
   - the five gateway principals (Preview, Apply, Drift, replication,
@@ -183,7 +196,9 @@ ConfigRead roles.
   nor the active counts. Those change together in G1.2's pin PR.
 - **Acceptance:**
   - P: `build_catalog()` from the pinned baseline reproduces the pinned
-    result hash. The candidate passes `build_registry`. It passes the
+    result hash. With the candidate catalog's hash substituted for
+    `CATALOG_HASHES[env]` (a test fixture) and a fixture `SeedKeyBinding`,
+    the candidate passes `build_registry`. It passes the
     mixed-phase verifier against fixtures of the post-CREATE state, with
     the `GitHubOperator*` executors **active** (TEST today) and, separately,
     **disabled** (PROD, unless G1.2 step 1 observes them active), and the
@@ -197,12 +212,23 @@ ConfigRead roles.
   - N: a test that compares every pre-existing statement, policy,
     principal, attachment and binding with the baseline finds no change
     (the re-scoped D-A9 entries are the only exception, and each adds only
-    an exact gateway ARN or resource). `verify_active_enrollment` refuses
+    an exact gateway ARN or resource, or uses one of the four allowed
+    non-exact forms that architecture AD-A1 lists). `verify_active_enrollment` refuses
     an inline policy name outside the fixed set on Preview, Drift or
     replication, and any inline policy on the Apply or logging role (P:
     exactly the fixed inline names pass). The mixed-phase verifier refuses an
     active gateway trust, a disabled executor trust, and any changed
-    pre-existing attachment. The CREATE validator refuses a change set with any Modify,
+    pre-existing attachment. A simulator matrix of the rendered dedicated
+    role (identity ∩ ceiling, with its guard) denies:
+    - `iam:UpdateAssumeRolePolicy`, `UpdateRole`, `UpdateRoleDescription`,
+      `TagRole` and
+      `UntagRole` on each of the five gateway roles;
+    - `iam:AttachRolePolicy` of any policy other than the four fixed
+      Apply-role ARNs, including an AWS-managed admin policy;
+    - `iam:PutRolePolicy` on the CI Apply and logging roles;
+    - any IAM action on a USI or BI role.
+
+    The CREATE validator refuses a change set with any Modify,
     Remove, replacement, dynamic or extra Add row, except the exact Modify rows of the shared Preview/Drift ceilings and the five operator guards (the operator bindings are catalog metadata, not rows); any Modify row on USI's `G-GitHubGovernanceApply` or `ceiling/GitHubGovernanceApply` is refused. The activation validator
     refuses any row other than the gateway trust Modify rows, and any
     CI-role trust with a `pull_request` or `ref` subject, another
@@ -218,13 +244,17 @@ ConfigRead roles.
   independent stack); a result that would change `dc27f076…` or any
   Resource-`*` deny other than the D-A9 operator guards `c18540fb…` /
   `0142330f…`; an admission entry that is not an exact ARN or exact
-  resource (for example a prefix or wildcard); any new or amended
+  resource (for example a prefix or wildcard), other than the four
+  allowed non-exact forms that architecture AD-A1 lists; any new or amended
   ceiling, guard or identity that renders above 6144 characters (V-A12;
   escalate, never compact).
 
 ### G1.2 (BI; human seed operator, live): Install, activate and pin (TEST, then PROD)
 
-- **Needs:** G1.1 merged; XP-A1; XP-A2; an XP-A4 slot per environment.
+- **Needs:** G1.1 merged; **#284 merged and installed**, including its
+  activation PR pinning `ff2eaf29…` and `scripts/operator_seed_observation.py`;
+  CR-A2 accepted by the USI owner (the gateway slot after USI row 34 and
+  before USI row 42); XP-A1; XP-A2; an XP-A4 slot per environment.
 - **Work:** AD-A1 "Installation and activation", per environment:
   - absent-name checks, and the observed lifecycle phase (active or
     disabled) of each `GitHubOperator*` executor, recorded for the
@@ -257,14 +287,23 @@ ConfigRead roles.
     `…:ref:refs/heads/main`, another environment, another repository id
     and a fork. `iam:SimulatePrincipalPolicy` (BI identity) denies
     `iam:CreateRole` and `ssm:GetParameter` to each CI role.
+    `iam:SimulatePrincipalPolicy` on the installed dedicated role
+    reproduces G1.1's denies: no trust, role or tag update on the five
+    roles, and no attach outside the four fixed ARNs.
   - E: no operator run happens between install and pin, except those the
-    #284 runbook requires inside the window.
+    #284 runbook requires inside the window. The logging role's trust with
+    `aws:SourceAccount` is accepted (V-A9).
 - **Evidence:** both change-set listings and ids, the template digests,
   the readbacks, the verifier outputs, the absent-name results, and
   `@Kravalg`'s seed-review approval.
-- **STOP:** an existing role or policy with a target name; a change set
-  with any row outside the validator; a partial result (reconcile it
-  first; never replay a change set).
+- **STOP:**
+  - an existing role or policy with a target name;
+  - a change set with any row outside the validator;
+  - a partial result (reconcile it first; never replay a change set);
+  - the live seed template or catalog differs from the pinned baseline;
+  - **the PROD seed stack, or its baseline template, is absent or
+    unobserved.** #284 was TEST-only, so PROD's installed state must be
+    read first. Escalate to the BI owner and do not install.
 
 ### G1.3 (BI): Gateway backend (TEST, then PROD)
 
@@ -301,6 +340,16 @@ ConfigRead roles.
      `GitHubGovernanceApply-api-gateway-infrastructure-{env}`; preview and
      drift in the existing `{env}-governance-preview`/`-drift`
      environments under the shared roles. The USI target is unchanged.
+     **Per-stack target filter (readiness F5).** The governance program
+     builds every repository in the catalog (`governance.py` lines
+     969-972, 1033-1035; `governance/Pulumi.test.yaml` line 20 reads
+     `repositories.governance.json`). So a new stack-config key selects
+     the target repositories, and each stack builds only its own:
+     - the existing `test`/`prod` stacks select USI only;
+     - the gateway stacks select the gateway only.
+
+     Negative tests: the USI stacks plan no gateway resource, and the
+     gateway stacks plan no USI resource.
   3. The BI repository admin creates the protected environments
      `test-governance-api-gateway-infrastructure` and
      `prod-governance-api-gateway-infrastructure` (`@Kravalg` as sole
@@ -313,6 +362,35 @@ ConfigRead roles.
      backend and writes the basic `pulumi-backend` and `secret-read-deny`
      or `read-only` documents (AD-A7, first row), applied TEST then PROD
      under the dedicated role.
+  **How the catalog change is applied.** BI applies from the PR head,
+  before merge, through `.github/workflows/pulumi-pr-command-runner.yml`.
+  The step-4 PR's `/pulumi` run therefore applies the stacks that read
+  `repositories.governance.json` in the runner's own order: for each
+  environment, TEST before PROD, operator → governance → platform.
+  - TEST: `operator_test` line 132, then `governance_test` line 154 (needs
+    `operator_test`), then `platform_test` line 178.
+  - PROD: `operator_prod` line 261, then `governance_prod` line 288, then
+    `platform_prod` line 317.
+
+  The governance account workflow checks out the PR head
+  (`pulumi-governance-account.yml` lines 233-241).
+  - The operator stack (`pulumi/github-ci-bootstrap/__main__.py` lines
+    41-45 and 141-145 build `GovernanceAutomation` from the catalog)
+    therefore creates the shared Preview/Drift gateway read policies of
+    step 1 before the gateway governance target runs.
+  - The runner's governance jobs must include the gateway target. That is
+    step 2's per-target selection, and a workflow fixture test checks it.
+  - Each environment's apply is `@Kravalg`-approved under the runner's
+    protected environments, with the user's per-action authorization.
+  - The USI governance stacks plan nothing new (the target filter).
+  5. **Platform-stack apply (authorized step).** The platform stack derives
+     the central-logging bucket policy from the same catalog
+     (`infra/bootstrap_infrastructure.py` lines 18-30;
+     `infra/logging_bucket.py` lines 165-178). Adding the gateway changes
+     that policy, so a reviewed platform-stack plan shows only the
+     gateway state bucket added as a logging source. It is applied TEST
+     then PROD under the platform's own protected environments, each with
+     its own per-action authorization.
 - **Acceptance:**
   - P: the BI verifier reads back the bucket (versioning, SSE-KMS with the
     key, public access blocked, TLS-only policy, replication) and the key
@@ -372,7 +450,10 @@ ConfigRead roles.
     (simulator).
   - E: a `cloudWatchRoleArn` already set by another owner is a STOP, not
     an overwrite.
-- **STOP:** XP-A12 finds another owner and no agreement.
+- **STOP:** XP-A12 finds another owner and no agreement. **Conditional
+  (not decided):** V-A8 finds no scoped form of `logs:PutResourcePolicy`
+  and the BI owner declines it on Resource `*` for the dedicated role.
+  Then G1.5 stops for a user decision.
 
 ### G1.6 (BI): Gateway CMK (TEST, then PROD)
 
@@ -411,7 +492,8 @@ ConfigRead roles.
 ### G1.7 (BI): PROD certificate and read grants
 
 - **Needs:** D-A3 and XP-A11 (the `user.vilnacrm.com` zone id in account
-  `933245420672`); G1.4a (its pattern). TEST acceptance is **not**
+  `933245420672`); G1.4a (its pattern); and, only if the conditional PROD
+  boundary amendment below is needed, XP-A1 and an XP-A4 seed slot. TEST acceptance is **not**
   needed: the PROD certificate must precede USI row 49.
 - **Work:** the PROD **cert** rows for `user.vilnacrm.com` and the XP-A11
   zone, by a governance capability PR. A PROD boundary amendment (a seed slot) is
@@ -458,13 +540,25 @@ ConfigRead roles.
   `prod`, `prod-drift` with
   `@Kravalg` as the sole reviewer of `test` and `prod`,
   admin bypass off, self-review prevented, deployment limited to `main`
-  and the dispatch path; a `--check` mode that reads back and diffs.
+  and the dispatch path; **the environment variables the pipeline reads**
+  (D-A10, readiness F4): `AWS_PREVIEW_ROLE_ARN` in `{env}-preview`,
+  `AWS_APPLY_ROLE_ARN` in `{env}`, `AWS_DRIFT_ROLE_ARN` in `{env}-drift`,
+  and `PULUMI_BACKEND_URL` and `PULUMI_SECRETS_PROVIDER` in all three. BI
+  has the operator set the same variables for USI (BI `AGENTS.md` lines
+  101-102). There is a `--check` mode that reads back and diffs
+  rulesets, environments and variables.
 - **Acceptance:** P: the dry-run payload equals the fixture. N: a
   required check without a workflow job (or the reverse) fails the pin
-  test. E: `--check` against a fixture readback with an extra bypass
-  actor fails.
-- **Live (XP-A3, row 12):** the admin applies it; the `--check` output is
-  attached.
+  test. A one-directional name-match test fails on any workflow `vars.*`
+  read with no defined variable; at row 7 no workflow reads them yet. The
+  reverse direction (every defined variable is read by a workflow) is
+  added by G3.5 (row 14), once `deploy.yml` (row 13) and
+  `scheduled-drift.yml` (row 14) exist. E:
+  `--check` against a fixture readback with an extra bypass actor, or a
+  wrong role ARN, fails.
+- **Live (XP-A3, row 12):** the admin applies it, with the variable values
+  taken from the row 9 (role ARNs) and row 10 (backend) readbacks; the
+  `--check` output is attached.
 
 ## Epic E-G3: Governed pipeline
 
@@ -474,7 +568,13 @@ ConfigRead roles.
 - **Files:** `pyproject.toml`, `uv.lock` (replacing `pulumi/pyproject.toml`,
   `pulumi/poetry.lock`), `pulumi/Pulumi.yaml` (project
   `api-gateway-infrastructure`), `pulumi/Pulumi.test.yaml`,
-  `pulumi/Pulumi.prod.yaml` (deleting `Pulumi.example.yaml`),
+  `pulumi/Pulumi.prod.yaml`, `pulumi/Pulumi.ci.yaml` (the offline stack
+  of AD-A15: `stub_live_invokes: true`, a fixture account, the local file
+  backend, and the `passphrase` secrets provider with a committed
+  `encryptionsalt` and a fixed, non-secret passphrase set by the
+  Structural Preview job, because the stack holds no secret; USI's `dev`
+  stack uses the same provider, USI `pulumi/Pulumi.dev.yaml`; deleting
+  `Pulumi.example.yaml`),
   `pulumi/__main__.py` (registers nothing while both feature flags are
   off), `pulumi/app/config.py` (closed config with
   `features.certificate` and `features.front_door`, AD-A15), `Makefile`,
@@ -482,8 +582,12 @@ ConfigRead roles.
 - **Acceptance:** P: each stack's config loads and, with the flags off,
   the program registers nothing. N: a config without the backend URL,
   with a passphrase provider, with an account id that does not match the
-  stack, or with `front_door` on and `certificate` off fails. E: an
-  account id in a Python constant fails a source-scan test.
+  stack, or with `front_door` on and `certificate` off fails;
+  `stub_live_invokes` in `test` or `prod` fails to load. The exemption from
+  the "no passphrase provider" and "backend URL required" rules applies
+  to exactly `ci`; `test` and `prod` with a passphrase provider still fail.
+  E: an account id
+  in a Python constant fails a source-scan test.
 
 ### G3.2 (AGI): PR quality battery
 
@@ -502,7 +606,9 @@ ConfigRead roles.
   Preview`, `Destructive Diff Gate`, `IAM Gate`, `Policy`, `Contract
   Schema`), `policy/` (CrossGuard pack), `contracts/schema/agi-user-service-backend-v1.json`,
   tests.
-- **Acceptance:** P: a create-only structural preview passes all gates;
+- **Work:** `Structural Preview` runs `pulumi preview --stack ci` on a
+  local file backend with no AWS credentials (AD-A15).
+- **Acceptance:** P: a create-only structural preview of the `ci` stack passes all gates;
   `Contract Schema` passes with only the schema present. N: fixtures with
   a delete, a replace, a `delete-replaced`, an `aws:iam/*` resource, an
   `aws:ssm/*` resource, a stage without access logs, an API without
@@ -532,7 +638,10 @@ ConfigRead roles.
 ### G3.5 (AGI): Scheduled drift and probe
 
 - **Needs:** G3.4.
-- **Files:** `.github/workflows/scheduled-drift.yml`, a probe script, tests.
+- **Files:** `.github/workflows/scheduled-drift.yml`, a probe script, tests
+  (including the reverse direction of G2.2's variable name-match test:
+  every variable G2.2 defines is read by `deploy.yml` or
+  `scheduled-drift.yml`).
 - **Acceptance:** P: a scheduled run per initialized stack under
   `{env}-drift` runs `preview --refresh --expect-no-changes` and passes;
   the TEST schedule sits inside the USI weekday daytime window (PD-13).
@@ -563,12 +672,17 @@ ConfigRead roles.
   non-CNAME type is refused (kept tests).
 - **STOP:** the validation name already exists in the zone; the
   certificate stays `PENDING_VALIDATION` beyond 72 hours.
+- **Offline stack:** `Pulumi.ci.yaml` turns `features.certificate` on with
+  a fixture zone, and `certificate.py` reads the fixture under
+  `stub_live_invokes`. A `ci` preview with no credentials passes.
 - **Hand-off:** the ARN, the apply run URL and the plan sha256 to the USI
   owner, **before USI row 42**.
 
 ### G4.2 (AGI): PROD certificate
 
-- **Needs:** G4.1, G1.7; D-A3; XP-A11.
+- **Needs:** G4.1, G1.7; D-A3; XP-A11; G5.6's step-11 PR merged. G4.2
+  follows it in C-program, at least 7 days of WAF logs after row 23. USI
+  row 49 (XP-15) therefore waits on that too (architecture AD-A12).
 - **Acceptance:** as G4.1 for PROD, for `user.vilnacrm.com` in the XP-A11
   zone of account `933245420672` (`Pulumi.prod.yaml`
   `features.certificate: true`); the ARN goes to the USI owner for USI
@@ -582,7 +696,11 @@ ConfigRead roles.
   D-A8.
 - **Files:** `contracts/user-service-backend/test.json`,
   `pulumi/app/backend_contract.py`, `Pulumi.test.yaml`
-  (`features.front_door: true`), tests.
+  (`features.front_door: true`), `contracts/user-service-backend/ci.json`
+  and `Pulumi.ci.yaml` (`features.front_door: true`; fixture invokes under
+  `stub_live_invokes`), tests. A `ci` preview with both flags on and no
+  credentials passes, and the `test` contract's live invokes run on
+  every `test` preview and cannot be disabled.
 - **Acceptance:** P: offline checks and the live invokes of AD-A3 pass in
   `/pulumi test plan`. N: fixtures with an extra field, a wrong account
   or region, a listener on another load balancer, an HTTP listener, a
@@ -637,7 +755,8 @@ ConfigRead roles.
 ### G5.6 (AGI + USI live): TEST acceptance, gate A-T
 
 - **Needs:** G5.5, G3.5.
-- **Work:** the twelve steps of AD-A12 gate A-T, from one exercise
+- **Work:** the steps of AD-A12 gate A-T (1-12, with 8a latency and 8b
+  availability), from one exercise
   workflow inside the USI TEST daytime window: probes are unauthenticated
   HTTPS and TLS; evidence reads (Logs Insights, `GetSampledRequests`)
   run under the Drift role in `test-drift`; only step 9 uses the Apply
@@ -660,7 +779,8 @@ ConfigRead roles.
 
 ### G6.2 (AGI): PROD front door, gate A-P
 
-- **Needs:** G6.1; the D-A7 values derived from the G5.6 evidence.
+- **Needs:** G6.1; the D-A7 values derived from the G5.6 evidence;
+  XP-A10 (the PROD alarm endpoint).
 - **Work:** stack config for PROD only (the program is shared); the
   CommonRuleSet in block from the start with the TEST overrides.
 - **Acceptance:** P: `/pulumi prod plan` and `up` after the same head's
@@ -695,10 +815,10 @@ ConfigRead roles.
 | 6 | G3.3 guardrails, policy pack, contract schema | AGI | C-pipeline, C-policy, C-contract head |
 | 7 | G2.2 repository-controls definition | AGI | C-controls |
 | 8 | G1.1 gateway seed enrolment, dedicated governance role and re-scoped admission packet, source only (D-A1, D-A9, D-A10, D-A11, V-A10, V-A12) | BI | C-BI-A head |
-| 9 | G1.2 seed install with the dedicated governance role and the re-scoped admission, trust activation and catalog pin, TEST then PROD (XP-A1) | BI (human seed operator) | C-BI-A; seed slot per environment |
+| 9 | G1.2 seed install with the dedicated governance role and the re-scoped admission, trust activation and catalog pin, TEST then PROD (XP-A1; after #284; the CR-A2 slot after USI row 34 and before USI row 42) | BI (human seed operator) | C-BI-A; seed slot per environment |
 | 10 | G1.3 governance mode and per-target selection, the BI environment, operator read policies and backend, TEST then PROD (D-A9, D-A11) | BI | C-BI-A; governance apply |
 | 11 | G1.4a TEST certificate and read grants (governance) | BI | C-BI-A; governance apply |
-| 12 | XP-A3 admin applies the G2.2 controls; readback attached | admin (`@Kravalg`) | external |
+| 12 | XP-A3 admin applies the G2.2 controls and environment variables (values from the row 9 and row 10 readbacks); readback attached | admin (`@Kravalg`) | external |
 | 13 | G3.4 ChatOps with saved plans; `initialize-stack` TEST and PROD; gate A-0 | AGI | C-pipeline |
 | 14 | G3.5 scheduled drift and probe | AGI | C-pipeline |
 | 15 | G4.1 TEST certificate (PR #34 amended); ARN to USI (XP-A8) **before USI row 42** | AGI | C-program |
@@ -731,11 +851,11 @@ open.
 - G0.2 (5) needs 3 and 4.
 - G3.3 (6) needs 4.
 - G2.2 (7) needs 4 and 6.
-- G1.1 (8) needs D-A1, D-A9, D-A10, D-A11, V-A10 and V-A12.
+- G1.1 (8) needs D-A1, D-A9, D-A10, D-A11, V-A10, V-A12 and V-A13 (USI row 34's result catalog must exist; cross-plan, AD-A12).
 - G1.2 (9) needs 8.
 - G1.3 (10) needs 9.
 - G1.4a (11) needs 9 and 10.
-- XP-A3 (12) applies row 7.
+- XP-A3 (12) applies row 7, with values from rows 9 and 10.
 - G3.4 (13) needs 6, 9, 10 and 12.
 - G3.5 (14) needs 13.
 - G4.1 (15) needs 1, 11 and 13.
@@ -748,7 +868,7 @@ open.
 - G5.5 (24) needs 23.
 - G5.6 (25) needs 14 and 24.
 - G1.7 (26) needs 11, D-A3 and XP-A11.
-- G4.2 (27) needs 15 and 26.
+- G4.2 (27) needs 15, 25 (the step-11 PR) and 26.
 - G1.8 (29) needs 25 and 26.
 - G6.1 (30) needs 25, 27, 28 and 29.
 - G6.2 (31) needs 30.
@@ -761,7 +881,9 @@ Other levels of the check:
   G1.1's tests (8) use the candidate catalog and fixtures, not installed
   state from row 9. G2.2's required-check pin test (7) reads the
   workflows of rows 4 and 6, which define every required check, including
-  `Contract Schema`. G3.3's policy rule for web ACLs (6) applies only to
+  `Contract Schema`. Its variable name-match test is one-directional at
+  row 7, and the reverse direction lands in G3.5 (14), after the
+  workflows of rows 13 and 14 exist. G3.3's policy rule for web ACLs (6) applies only to
   mapped stages, so G5.3 (22) passes before G5.4 (23) adds the ACL.
 - **Ownership level.** No row edits a file whose chain head is a later
   row (architecture §4). In C-BI-A, the pin PR of row 9 is the only change

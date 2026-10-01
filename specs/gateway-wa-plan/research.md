@@ -7,7 +7,7 @@ branch: feat/gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a (origin/main)
 date: 2026-10-01
 status: planning-only
-revision: 4 (2026-10-01: GR-18…GR-20 added for D-A1; the options and risks tables carry the user decisions D-A1…D-A11)
+revision: 5 (2026-10-01: readiness round 1 corrections: GR-13 line numbers, GR-19 framing)
 ---
 
 # Technical research: the API gateway Well-Architected track
@@ -206,7 +206,7 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
     `PulumiStateRepl-user-service-infrastructure-test`. PROD has the same
     six with `-prod` and `-prod-preview`. The three proposed operator roles
     carry `owner_project: independent_seed` and `existing: false`.
-  - `pulumi/seed/policy_registry.py` lines 17-20 pin `CATALOG_HASHES`
+  - `pulumi/seed/policy_registry.py` lines 18-21 pin `CATALOG_HASHES`
     (TEST `ef419680…`, PROD `d4b56073…`); `_mutable_attachment_sets`
     (line 532) and `verify_active_enrollment` (line 570) enforce the exact
     attachment closure. Line 355 requires exactly 21 existing roles;
@@ -310,7 +310,19 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
   documents" (lines 55-59).
   #285 chose a separate three-resource CloudFormation stack for its
   publisher role, and stated that its principals did not enter the
-  catalogs (lines 34-54; `runtime-enrollment.md` lines 315-327). So the seed
+  catalogs (lines 34-54; `runtime-enrollment.md` lines 315-327). This is
+  not a #285-only position. Origin/main (`bea5252`, read through
+  `wt-boot-urllib3`) enforces the same rule:
+  - `tests/unit/test_poc_installation_boundary.py` lines 63-79 pin 55
+    policies, 24 principals and 58 resources;
+  - `specs/219-test-workload-capability/installability-stop.md` lines
+    33-39 say to keep "the original catalog and activation protocol
+    intact";
+  - `scripts/operator_seed_installation.py` hard-codes the counts (lines
+    165, 204, 209, 462, 517, 542).
+
+  V-A10 therefore asks the BI owner to reverse a documented main rule.
+  So the seed
   registration route of D-A1 needs the inventory, installer and validator
   code changes of G1.1. Today's code would reject the gateway principals.
 - **GR-20 `[SRC]` USI ConfigRead trust.** BI `pulumi/infra/ci_config.py`
@@ -454,6 +466,6 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
 | K-13 | USI TEST scales to zero on nights and weekends (USI FR-14 (c)); probes and the 5XX alarm would fail or page then. | PD-13; FR-A13, FR-A21. |
 | K-14 | The USI descriptor's authenticated publication is unimplemented (GR-6). | D-A8; AD-A3 live re-verification. |
 | K-15 | The seed registry hard-codes its principal counts and treats `existing: false` as an operator executor (BI `pulumi/seed/policy_registry.py` lines 355, 431-446, 505-514, 570-590). | AD-A1: the seed creates the gateway principals as a new seed-created service kind and registers them, with inventory, installer and verifier changes in G1.1 (GR-18, GR-19; V-A10). |
-| K-16 | For new runtime roles, the BI owner chose a separate CloudFormation stack, not an extension of the seed inventory (GR-19). The BI owner may decline the inventory extension that D-A1 needs. | V-A10: the BI owner confirms the extension shape in G1.1's review. If it is declined, the story STOPs and goes back to the user. There is no silent fallback to an independent stack. |
+| K-16 | For new runtime roles, the BI owner chose a separate CloudFormation stack, not an extension of the seed inventory (GR-19). The BI owner may decline the inventory extension that D-A1 needs. | V-A10: the BI owner reverses origin/main's documented rule and confirms the extension shape before any G1.1 code (a STOP). If it is declined, the story STOPs and goes back to the user. There is no silent fallback to an independent stack. |
 | K-17 | Governance cannot write any gateway IAM resource or create the gateway's S3, KMS and account-level resources. Its guard (`8c068aaa…`, `5366ec11…`) and its USI-scoped seed ceilings (`ceiling/GitHubGovernanceApply` `7a36d2ff…`, `a392c269…`, `00257170…`, `abfe3f39…`; `C-GitHubGovernancePreview`/`-Drift`) both block it, and the operator executor guards (`0c5eed92…`, `c18540fb…`, `408cdbf9…` in TEST) close the governance policy names to the USI ones. So the gateway's grants and non-role BI resources need an owner that the USI pattern does not give (GR-12, GR-18). | D-A9, re-scoped by D-A11: the gateway's governance apply runs under a dedicated seed-created role; only the shared Preview/Drift ceilings, the operator bindings and the five operator guards are amended (AD-A1). |
-| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | Resolved by D-A11: a dedicated governance Apply role with its own ceiling (measured 5866); USI's ceiling untouched; V-A12. |
+| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | Resolved by D-A11: a dedicated governance Apply role with its own ceiling (measured 5737 in revision 5); USI's ceiling untouched; V-A12. |

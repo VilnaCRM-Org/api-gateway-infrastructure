@@ -4,7 +4,7 @@ workflow: _bmad/core/tasks/bmad-create-prd (non-interactive; steps resolved from
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 4 (2026-10-01: D-A11 dedicated governance Apply role; D-A9 admission re-scoped)
+revision: 5 (2026-10-01: readiness round 1 findings F1-F13 resolved)
 inputDocuments: [research.md, brief.md, decisions.md, USI specs/workload-wa-hardening (9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -53,6 +53,8 @@ A test in G3.2 recomputes these counts from the tables below.
     governance apply (D-A9);
   - applying the repository ruleset and environments (repository admin,
     XP-A3);
+  - the BI platform-stack apply that adds the gateway state bucket as a
+    central-logging source (G1.3 step 5);
   - creating the BI environments `{test,prod}-governance-api-gateway-infrastructure`
     (BI repository admin, G1.3, D-A11);
   - closing PRs #26, #32 and #33 and pushing to PR #34;
@@ -73,26 +75,26 @@ evidence, **C** cross-repository.
 | ID | Requirement | Owner | Env | Risk |
 | --- | --- | --- | --- | --- |
 | FR-A01 | **Gateway CI identities (D-A1).** Per environment, roles `GitHubCiPreview-api-gateway-infrastructure-{env}`, `GitHubCiApply-…-{env}` and `GitHubCiDrift-…-{env}` exist. They are created by the BI independent seed stack through a reviewed seed catalog amendment, installed by the human seed operator, as the seed created the `GitHubOperator*` executors (research GR-18). Each is created with disabled trust, its seed-owned boundary `policy/issue215-seed/{env}/ceiling/GovernanceBoundary-api-gateway-infrastructure-{env}` and its immutable seed-owned guard `policy/issue215-seed/{env}/guard/GitHubCi{Preview,Apply,Drift}-api-gateway-infrastructure`, all in the same change set (no unguarded window). Trust is activated afterwards by a separate seed change set. Under PD-12 the same amendment creates `PulumiStateRepl-api-gateway-infrastructure-{env}` with `…/ceiling/GovernanceReplicationBoundary-api-gateway-infrastructure-{env}` and guard `…/guard/PulumiStateRepl-api-gateway-infrastructure`; no ConfigRead reader (D-A10). Trust: the GitHub OIDC provider; `aud sts.amazonaws.com`; `repository_id 887871673` and `repository_owner_id 114362548`; Apply only `environment:{env}`; Preview only `environment:{env}-preview`; Drift only `environment:{env}-drift` (PD-14). **No `pull_request`, `ref` or wildcard subject.** `MaxSessionDuration` 3600 s. | BI | TEST, PROD | I, L |
-| FR-A02 | **Seed registration (D-A1).** The same amendment records the gateway principals, boundaries, guards and the logging role's identity policy in `pulumi/seed/catalogs/{env}.json` as a new seed-created service kind (not `existing: true`, which means created by another owner, and not the `GitHubOperator*` executor kind). It changes the fixed counts, policy-kind inventory, disabled- and active-trust verification and attachment rules in `pulumi/seed/policy_registry.py`, and the installer, change-set and activation validators in `scripts/operator_seed_installation.py`. Only after the installed seed is read back does a reviewed PR move `CATALOG_HASHES` to the result hash, and `verify_active_enrollment` pass (architecture AD-A1). It also creates the dedicated governance Apply role `GitHubGovernanceApply-api-gateway-infrastructure-{env}` with its own exact-ARN ceiling (measured 5866 characters), guard (3867) and seed-owned identity (D-A11). It carries the re-scoped D-A9 admission: exact gateway entries in the shared `C-GitHubGovernancePreview`/`-Drift` ceilings (5104/5114 TEST/PROD after an in-place merge), in the catalog's operator bindings and in the five operator executor guards (architecture AD-A1). USI's `G-GitHubGovernanceApply` and `ceiling/GitHubGovernanceApply` do not change. No other existing guard statement or ceiling changes. Per environment the result has 30 principals (9 seed-created) and 67 policies. The new principal kind allows exactly the fixed governance-owned inline policy names on the Preview, Drift and replication roles. The boundary renders at ≤ 6144 characters. | BI | TEST, PROD | I, S, L |
-| FR-A03 | **Backend** (governance, D-A9). State bucket `pulumi-api-gateway-infrastructure-{env}-state` (versioning, SSE-KMS, public access blocked, TLS-only bucket policy, `Retain`) and Pulumi secrets key alias `pulumi-api-gateway-infrastructure-{env}-secrets`, replicated as BI replicates the USI backend. No passphrase secrets provider. | BI | TEST, PROD | S, L |
+| FR-A02 | **Seed registration (D-A1).** The same amendment records the gateway principals, boundaries, guards and the logging role's identity policy in `pulumi/seed/catalogs/{env}.json` as a new seed-created service kind (not `existing: true`, which means created by another owner, and not the `GitHubOperator*` executor kind). It changes the fixed counts, policy-kind inventory, disabled- and active-trust verification and attachment rules in `pulumi/seed/policy_registry.py`, and the installer, change-set and activation validators in `scripts/operator_seed_installation.py`. Only after the installed seed is read back does a reviewed PR move `CATALOG_HASHES` to the result hash, and `verify_active_enrollment` pass (architecture AD-A1). It also creates the dedicated governance Apply role `GitHubGovernanceApply-api-gateway-infrastructure-{env}` with its own exact-ARN ceiling (measured 5737 characters), guard (5198) and seed-owned identity (D-A11). It carries the re-scoped D-A9 admission: exact gateway entries in the shared `C-GitHubGovernancePreview`/`-Drift` ceilings (5419/5429 TEST/PROD after an in-place merge and a separate gateway KMS read), in the catalog's operator bindings and in the five operator executor guards (architecture AD-A1). USI's `G-GitHubGovernanceApply` and `ceiling/GitHubGovernanceApply` do not change. No other existing guard statement or ceiling changes. Per environment the result has 30 principals (9 seed-created) and 67 policies. The new principal kind allows exactly the fixed governance-owned inline policy names on the Preview, Drift and replication roles. The boundary renders at ≤ 6144 characters. | BI | TEST, PROD | I, S, L |
+| FR-A03 | **Backend** (governance, D-A9). State bucket `pulumi-api-gateway-infrastructure-{env}-state` (versioning, SSE-KMS, public access blocked, TLS-only bucket policy, `Retain`) and Pulumi secrets key alias `pulumi-api-gateway-infrastructure-{env}-secrets`, replicated as BI replicates the USI backend. No passphrase secrets provider in `test` or `prod` (the offline `ci` stack alone uses one, AD-A15). | BI | TEST, PROD | S, L |
 | FR-A04 | **Capability grants** (governance, D-A9, inside the policy set G1.1 admits). Identity allows for the three CI roles cover exactly the gateway resources of architecture AD-A7 (names, prefixes, conditions), with the deny set of AD-A7. No `iam:*`, `ssm:*`, `secretsmanager:GetSecretValue`, `iam:PassRole` or `iam:CreateServiceLinkedRole`. A simulator matrix proves each allow and each deny. | BI | TEST (G1.4a, G1.4b), PROD (G1.7, G1.8) | I, L |
 | FR-A05 | **Account prerequisites.** Per account, BI owns (a) the API Gateway CloudWatch role `ApiGatewayCloudWatchLogs-{env}`, trusted by `apigateway.amazonaws.com` with a policy scoped to the gateway access-log group, created and registered by the D-A1 seed amendment like the other gateway roles, (b) the account's `cloudWatchRoleArn` setting for `eu-central-1`, and (c) the CloudWatch Logs resource policy for `aws-waf-logs-api-gateway-infrastructure-*` (D-A5). Governance writes (b) and (c) (D-A9). The API Gateway service-linked role exists before the first gateway apply. | BI | TEST, PROD | I, L |
-| FR-A06 | **Gateway CMK** (D-A4; governance, D-A9). One symmetric CMK per environment, rotation on, alias `alias/api-gateway-infrastructure-{env}-logs`; the key policy lets `logs.eu-central-1.amazonaws.com` use it only with `kms:EncryptionContext:aws:logs:arn` matching the two gateway log groups, and lets the gateway Apply role call `kms:DescribeKey` through `logs`. The SNS topic uses the same key, for the reason D-8 records for the workload topic (CloudWatch alarms cannot publish to a topic on the AWS-managed SNS key). | BI | TEST, PROD | I, L |
+| FR-A06 | **Gateway CMK** (D-A4; governance, D-A9). One symmetric CMK per environment, rotation on, alias `alias/api-gateway-infrastructure-{env}-logs`; the key policy lets `logs.eu-central-1.amazonaws.com` use it only with `kms:EncryptionContext:aws:logs:arn` matching the two gateway log groups, and lets the gateway Apply role call `kms:DescribeKey` and `kms:CreateGrant` through `logs` (`kms:ViaService`, as AD-A7 and AD-A14). The SNS topic uses the same key, for the reason D-8 records for the workload topic (CloudWatch alarms cannot publish to a topic on the AWS-managed SNS key). | BI | TEST, PROD | I, L |
 
 ### E-G2 Repository controls and hygiene (AGI)
 
 | ID | Requirement | Owner | Env | Risk |
 | --- | --- | --- | --- | --- |
-| FR-A07 | **Repository controls.** A reviewed, tested definition (ported `configure_github_repository_controls.py`) holds: a `main` branch ruleset (no bypass actors; deletion and non-fast-forward blocked; pull request with 1 approval, code-owner review, last-push approval, thread resolution, stale-review dismissal, squash only; the required checks of architecture AD-A11); CODEOWNERS `* @Kravalg`; environments `test-preview`, `test`, `test-drift`, `prod-preview`, `prod`, `prod-drift`, each limited to `main` or to the dispatch path the pipeline uses, with `@Kravalg` as the sole required reviewer of `test` and `prod` and self-review prevented. The admin applies it (XP-A3); a readback equals the definition. | AGI | repo | L |
+| FR-A07 | **Repository controls.** A reviewed, tested definition (ported `configure_github_repository_controls.py`) holds: a `main` branch ruleset (no bypass actors; deletion and non-fast-forward blocked; pull request with 1 approval, code-owner review, last-push approval, thread resolution, stale-review dismissal, squash only; the required checks of architecture AD-A11); CODEOWNERS `* @Kravalg`; environments `test-preview`, `test`, `test-drift`, `prod-preview`, `prod`, `prod-drift`, each limited to `main` or to the dispatch path the pipeline uses, with `@Kravalg` as the sole required reviewer of `test` and `prod` and self-review prevented; and the environment variables the pipeline reads (the role ARNs per environment, the backend URL and the secrets provider; D-A10), with values from the G1.2 and G1.3 readbacks. The admin applies it (XP-A3); a readback equals the definition, variables included. | AGI | repo | L |
 | FR-A08 | **Hygiene.** Remove both template-sync workflows (PAT, wrong source) and the privileged auto-commit linter; pin every action by full commit SHA; run every PR job with `permissions: contents: read` and no secret; replace `docker-compose.yml`'s static-key passthrough with an SSO-profile note for local debugging only; dependabot covers the uv lockfile and GitHub Actions. | AGI | repo | — |
 
 ### E-G3 Governed pipeline (AGI)
 
 | ID | Requirement | Owner | Env | Risk |
 | --- | --- | --- | --- | --- |
-| FR-A09 | **Toolchain and stacks.** uv with a frozen lockfile, Python 3.11, `pulumi-aws` 7.23.0 (PD-2); project `api-gateway-infrastructure`; `Pulumi.test.yaml` and `Pulumi.prod.yaml` pin the account, region, backend URL and `awskms://` secrets provider; account ids live only in stack config and the contracts, never in Python constants. | AGI | TEST, PROD | S |
+| FR-A09 | **Toolchain and stacks.** uv with a frozen lockfile, Python 3.11, `pulumi-aws` 7.23.0 (PD-2); project `api-gateway-infrastructure`; `Pulumi.test.yaml` and `Pulumi.prod.yaml` pin the account, region, backend URL and `awskms://` secrets provider; an offline `ci` stack (fixture account, contracts and zone, `stub_live_invokes`, allowed only in `ci`) serves the credential-less structural preview (architecture AD-A15); account ids live only in stack config and the contracts, never in Python constants. | AGI | TEST, PROD | S |
 | FR-A10 | **Quality battery** on every PR, unprivileged: ruff, type check, maintainability, bandit, pip-audit, gitleaks, actionlint, zizmor, yamllint, hadolint, CodeQL (python, actions), dependency review, unit tests with Pulumi mocks at **100% branch coverage**. | AGI | — | — |
-| FR-A11 | **Guardrails.** A structural preview on a local file backend; the destructive-diff gate (`delete`, `replace`, `delete-replaced` blocked, no label override) with one reviewed allowance for `aws:apigateway/deployment:Deployment` replacement (AD-A10); an IAM gate that fails on **any** `aws:iam/*` resource; a policy pack that enforces AD-A10's front-door rules. | AGI | — | I |
+| FR-A11 | **Guardrails.** A structural preview of the `ci` stack on a local file backend with no credentials; the destructive-diff gate (`delete`, `replace`, `delete-replaced` blocked, no label override) with one reviewed allowance for `aws:apigateway/deployment:Deployment` replacement (AD-A10); an IAM gate that fails on **any** `aws:iam/*` resource; a policy pack that enforces AD-A10's front-door rules. | AGI | — | I |
 | FR-A12 | **ChatOps with saved plans.** `/pulumi <env> plan` and `/pulumi <env> up` on a PR, from a write-permission member, on the PR head SHA, never from a fork; plan under the Preview role in `{env}-preview`, saved with sha256; up under the Apply role in `{env}` after `@Kravalg`'s approval, replaying exactly that plan for exactly that head; PROD refuses a head without a successful TEST up of the same head; results commented on the PR. `initialize-stack` creates backend metadata only. | AGI | TEST, PROD | I, S, L |
 | FR-A13 | **Scheduled drift and probe.** On a schedule (TEST: weekdays inside the USI daytime window, PD-13; PROD: daily), per initialized stack, under the Drift role in `{env}-drift`: `pulumi preview --refresh --expect-no-changes` (the USI drift invocation, USI `scripts/_pulumi_command_support.py` line 68), which also runs the live contract checks of FR-A16; then, once the stack exports a domain, one unauthenticated HTTPS `GET` of the health path through the custom domain (keeps the VPC link active, GA-2), whose result is published as a custom metric for the FR-A21 alarm. A failure fails the job. | AGI | TEST, PROD | L |
 
@@ -123,11 +125,11 @@ evidence, **C** cross-repository.
 | ID | Requirement | Category | How proved |
 | --- | --- | --- | --- |
 | NFR-A01 | No long-lived credential in CI: OIDC only, no PAT, no static AWS key, no App-token write on PR events. | Security | workflow-shape tests; G2.1 grep |
-| NFR-A02 | Least privilege: every allow names exact ARNs or prefixes; Resource `*` only for actions without resource-level support, each listed in AD-A7 with its source (V-A8). | Security | simulator matrix |
+| NFR-A02 | Least privilege: every allow names exact ARNs or prefixes; Resource `*` only for actions without resource-level support, each listed in AD-A7 with its source (V-A8). Accepted prefixes: the API Gateway Apply writes on `/restapis/*` and `/vpclinks/*` (generated ids), tag-conditioned where API Gateway supports `aws:ResourceTag/Owner` (V-A11). The BI governance non-exact forms are the four that architecture AD-A1 lists. | Security | simulator matrix |
 | NFR-A03 | TLS 1.2 or later on both hops: client → API Gateway (FR-A20); API Gateway → ALB HTTPS with the name verified (FR-A17) against the USI listener's `ELBSecurityPolicy-TLS13-1-2-Res-2021-06`. | Security | policy pack; G5.6 |
 | NFR-A04 | Every gateway log group is KMS-encrypted with the gateway CMK (D-A4), has PD-5 retention and carries no credential or body. | Security, operations | policy pack; G5.6 |
-| NFR-A05 | Availability: two AZs; the VPC link is kept active; rebuild within PD-6. | Reliability | G5.6, runbook |
-| NFR-A06 | Latency: gateway overhead p99 ≤ 100 ms over the ALB's target response time in TEST at the PD-3 rate. | Performance | G5.6 measurement |
+| NFR-A05 | Availability: two AZs; the VPC link is kept active; rebuild within PD-6. | Reliability | gate A-T step 8b (two-AZ describe, link `AVAILABLE`, rebuild-runbook dry run with timings), G6.3 |
+| NFR-A06 | Latency: gateway overhead p99 ≤ 100 ms over the ALB's target response time in TEST at the PD-3 rate. | Performance | gate A-T step 8a: p99 of (`responseLatency` − `integrationLatency`) from the access log, over at least 10 minutes at the PD-3 rate |
 | NFR-A07 | Cost: one web ACL per environment, ≤ 1,500 WCU, no paid rule group; log retention per PD-5; TEST resources tagged for cost allocation. | Cost | policy pack |
 | NFR-A08 | Change safety: saved-plan only; destructive gate without override; TEST before PROD; `@Kravalg` approval; one seed operation open at a time. | Operations | workflow tests; XP-A4 |
 | NFR-A09 | 100% branch coverage on `pulumi/`, `policy/`, `scripts/`. | Quality | Coverage check |
@@ -140,7 +142,7 @@ evidence, **C** cross-repository.
 | --- | --- | --- | --- |
 | FR-A01 | Each role's trust lists exactly its one environment subject and the two id claims. | A token for `pull_request`, another environment, another repository id or a fork is refused (simulated trust evaluation, then live `AssumeRoleWithWebIdentity` from the real environment only). | A role name over 64 characters fails the template test. |
 | FR-A02 | The mixed-phase verifier (AD-A1) passes with the existing executors active and the gateway roles in disabled trust; after activation `verify_active_enrollment` passes against the result catalog; the hash pin matches. | Any changed pre-existing statement, guard, ceiling, principal or policy fails the amendment test (only the exact D-A9 admission rows are allowed); a change set with any row other than the expected Add rows and the D-A9 admission Modify rows (or, for activation, the gateway trust Modify rows) is refused. | Boundary at 6144 characters exactly passes; 6145 fails. |
-| FR-A03 | `pulumi login` and `stack init` against the new backend succeed in `initialize-stack`. | A passphrase provider in stack config fails the stack-config test. | An existing bucket name collision stops the install (absent-name check). |
+| FR-A03 | `pulumi login` and `stack init` against the new backend succeed in `initialize-stack`. | A passphrase provider in `test` or `prod` stack config fails the stack-config test (only `ci` is exempt). | An existing bucket name collision stops the install (absent-name check). |
 | FR-A04 | Simulator: each AD-A7 allow is `allowed`. | Simulator: `iam:CreateRole`, `ssm:GetParameter`, `apigateway:PATCH` on `/account`, `logs:PutResourcePolicy`, `route53:ChangeResourceRecordSets` on `x._domainkey.user.vilnacrmtest.com` are denied. | The record-name condition with a missing key is denied (`Null` guard). |
 | FR-A05 | `GetAccount` shows the BI role; the SLR exists. | The gateway Apply role cannot change `/account`. | `cloudWatchRoleArn` already set by another owner → STOP (XP-A12). |
 | FR-A06 | A log group created with the key accepts events. | Another log group cannot use the key (encryption-context condition). | Key rotation on. |
@@ -197,13 +199,20 @@ keep their USI names.
 - **XP-A3. Repository admin applies AGI controls.** A repository admin
   (`@Kravalg`) runs the reviewed controls script (G2.2) with an admin token,
   and the readback is attached to the PR. Admin token use is outside CI.
-- **XP-A4. Seed serialization slot.** The BI owner places each gateway seed
+- **XP-A4. Seed serialization slot.** **Precondition: #284 is merged and
+  installed**, including its activation PR pinning `ff2eaf29…` and
+  `scripts/operator_seed_observation.py`. The gateway's baseline is never
+  origin/main's `ef419680…`. The BI owner **and the USI owner** (CR-A2)
+  place each gateway seed
   operation (G1.2 install, admission and activation, and any later
   exact-ARN admission that a new governance policy ARN needs) in the same
   one-open queue as the USI plan's seed operations (USI architecture §4
   C-BI). Each runs on its predecessor's result catalog, inside a freeze
   window from install to catalog pin (#284 `post-seed-activation.md` lines
-  107-125). The plan schedules the TEST certificate path (rows 8-11, then
+  107-125). G1.2's TEST and PROD operations take the slot after USI row 34
+  (S5.7) and before USI row 42 (S5.18a, then XP-11). Every later USI seed
+  module rebases its pinned baseline onto the gateway result catalog
+  (CR-A2). The plan schedules the TEST certificate path (rows 8-11, then
   row 15) before USI row 42, because USI XP-11 needs the gateway's TEST
   certificate (K-4).
 - **XP-A5. API Gateway service-linked role.** `AWSServiceRoleForAPIGateway`
@@ -237,7 +246,9 @@ keep their USI names.
   account shows whether `cloudWatchRoleArn` is set, and by whom. If another
   owner set it, that owner and the BI owner agree on the change first.
 - **XP-A13. Implementation profile.** The devops-sdlc profile for this
-  repository exists before implementation (as USI XP-7).
+  repository exists before implementation (as USI XP-7). As of revision 5
+  it is absent, and so is the run's `attempts.json`: no implementation
+  attempt has been recorded.
 - **XP-A14. USI campaign coordination.** The USI owner accepts or declines
   CR-A1 and tells the gateway owner when USI S4.6 step 20 finishes and when
   step 17 is ready to start, so that rows 19-25 run in their window.

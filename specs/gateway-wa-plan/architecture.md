@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-create-architecture (Create mod
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 4 (2026-10-01: D-A11 dedicated governance Apply role for the gateway; D-A9 admission re-scoped; V-A12 resolved)
+revision: 5 (2026-10-01: readiness round 1 findings F1-F13 resolved)
 inputDocuments: [research.md, brief.md, prd.md, decisions.md, USI specs/workload-wa-hardening (9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -98,11 +98,16 @@ ECS tasks.
   - **Source packet (G1.1).** A new amendment module,
     `pulumi/seed/gateway_enrollment_amendment.py`, is modelled on
     `test_poc_prerequisite_amendment.py`. It pins, per environment:
-    - the baseline catalog hash, which is the pin in force at its slot
-      (TEST `ef419680…` on origin/main, `ff2eaf29…` once #284's pin PR
-      merges, or a later USI result; PROD `d4b56073…`);
-    - the digest of the complete installed seed template, as #284 pinned
-      `8b86a7ff…` for TEST;
+    - the baseline catalog hash. This is the result catalog of the seed
+      operation just before the gateway's slot in the shared queue
+      (CR-A2: after USI row 34 S5.7 and before USI row 42 S5.18a/XP-11).
+      It is downstream of #284's `ff2eaf29…` (TEST). The origin/main pin
+      `ef419680…` is **never** a valid baseline: installing on it would
+      precede #284 and invalidate #284's pinned template `8b86a7ff…`.
+      PROD's baseline is likewise the result catalog in force at the PROD
+      slot (`d4b56073…` unless an earlier operation changed PROD);
+    - the digest of the complete installed seed template at that slot, as
+      #284 pinned `8b86a7ff…` for its own TEST baseline;
     - the result catalog hash;
     - the exact list of Add rows and of the D-A9/D-A11 admission Modify rows.
 
@@ -244,7 +249,8 @@ ECS tasks.
     account settings, as it does for USI (D-A9). It runs in a new
     external-identity mode (a reviewed BI code change), in which it reads
     the seed-created gateway roles and creates none. Every extension names
-    exact ARNs only (the #284 FR6 precedent), under the BI owner's review
+    exact ARNs (the #284 FR6 precedent), except the four allowed non-exact
+    forms listed below, under the BI owner's review
     and `@Kravalg`'s approval. By D-A11 the gateway's governance **apply**
     runs under a dedicated role. USI's `ceiling/GitHubGovernanceApply` and
     `G-GitHubGovernanceApply` (including `8c068aaa…`, `5366ec11…` and
@@ -270,8 +276,12 @@ ECS tasks.
         `policy/issue215-seed/{env}/ceiling/GitHubGovernanceApply-api-gateway-infrastructure`
         (planning name). Its statements have the shape of the USI ceiling,
         with gateway resources only:
-        - the generic IAM and STS statement on `*` (`e1ba4aab…` shape;
-          its guard confines the writes);
+        - the generic IAM and STS statement on `*`, of `e1ba4aab…`'s
+          shape **without** `iam:UpdateAssumeRolePolicy`, `UpdateRole`,
+          `UpdateRoleDescription`, `TagRole` and `UntagRole`. The dedicated
+          role may not change any role's trust or tags (readiness F2). The
+          remaining policy and role reads and policy writes are confined by
+          its guard;
         - S3 on the exact gateway state and replica buckets;
         - KMS management, `CreateKey` and `TagResource`, conditioned on
           `Repository = api-gateway-infrastructure`, the environment and
@@ -283,9 +293,10 @@ ECS tasks.
         - `iam:PassRole` of the replication role to S3, and of
           `ApiGatewayCloudWatchLogs-{env}` to `apigateway.amazonaws.com`;
         - `apigateway:GET`/`PATCH` on `/account`;
-        - `logs:PutResourcePolicy`, `DeleteResourcePolicy` and
-          `DescribeResourcePolicies` (on `*` unless V-A8 finds
-          resource-level support);
+        - `logs:PutResourcePolicy` and `DescribeResourcePolicies`, with no
+          `DeleteResourcePolicy`. They are on `*` only if V-A8 finds no
+          scoped form; this is an allowed non-exact form, conditional on
+          V-A8 and the BI owner (see "Allowed non-exact forms");
         - the governance backend: the shared `governance/` prefix
           statements (`69f23143…`, `d4192129…` reused), object read and
           write only on the gateway stack's own paths
@@ -297,32 +308,54 @@ ECS tasks.
 
         It has no Secrets Manager statement (D-A10).
 
-        **Measured: 5866 characters** in TEST and in PROD (canonical JSON
-        with `policy_registry.canonical_json`, rendered by
-        `evidence/render_governance_sizes.py` in this bundle; the replica
-        bucket name is a placeholder of the USI name's length, which G1.1
-        fixes exactly). That is under 6144, with about 278 characters to
-        spare. The revision-4 audit's independent render of the earlier
-        shape gave 5660 against the 5611 first stated; the difference was
-        in the Purpose lists. The figure above supersedes both.
+        The replica bucket names are the deterministic names of BI
+        `pulumi_state.py` `_replica_bucket_name` (lines 267-275):
+        `pulumi-api-gateway-infrastructur-3ca14569-eu-west-1-replication`
+        (TEST) and `pulumi-api-gateway-infrastructur-8e7bb9a0-eu-west-1-replication`
+        (PROD), 63 characters each.
+
+        **Measured (revision 5): 5737 characters** in TEST and in PROD.
+        This is canonical JSON with `policy_registry.canonical_json`,
+        rendered by `evidence/render_governance_sizes.py` in this bundle.
+        It is under 6144, with 407 characters to spare. It supersedes
+        revision 4's 5866, which used a placeholder replica name and still
+        had the role-write actions and `DeleteResourcePolicy`.
       - **Guard**
         `policy/issue215-seed/{env}/guard/G-GitHubGovernanceApply-api-gateway-infrastructure`.
         It holds the six shared statements of USI's
         `G-GitHubGovernanceApply`, reused verbatim (TEST `dc27f076…`,
         `415affc4…`, `668edd62…`, `6bd9deea…`, `05f77e26…`, `d413d73a…`;
         PROD `dc27f076…`, `e59053be…`, `94b8d964…`, `0c46dd13…`,
-        `05f77e26…`, `aec83856…`). It adds two new statements of the
-        `8c068aaa…`/`5366ec11…` shape, listing gateway ARNs only:
+        `05f77e26…`, `aec83856…`). It adds five new statements, gateway
+        ARNs only. The first two have the `8c068aaa…`/`5366ec11…` shape:
         - `iam:*` denied outside the OIDC provider, the four Apply-role
           managed policies, the two gateway boundaries, and the five
           gateway roles;
-        - policy writes denied outside those four policies.
+        - policy writes denied outside those four policies;
+        - `iam:UpdateAssumeRolePolicy`, `UpdateRole`,
+          `UpdateRoleDescription`, `TagRole` and `UntagRole` denied on the
+          five gateway roles (the pattern of BI operator guard
+          `455fe8d0…`); `PutRolePermissionsBoundary` and
+          `DeleteRolePermissionsBoundary` are already denied by
+          `dc27f076…`;
+        - `iam:AttachRolePolicy` and `DetachRolePolicy` denied on
+          Resource `*` unless `iam:PolicyARN` is one of the four fixed
+          Apply-role policies (`ArnNotEquals`);
+        - `iam:PutRolePolicy` and `DeleteRolePolicy` denied on the CI Apply
+          role and the logging role. Inline names on Preview, Drift and
+          replication cannot be constrained by an IAM condition key, so
+          their fixed names are enforced by the registry's inline
+          allowance (detective, at every `verify_active_enrollment`).
 
-        **Measured: 3867 characters** (TEST and PROD).
+        **Measured (revision 5): 5198 characters** (TEST and PROD), with
+        `SeedKmsKeyArn` in `d413d73a…`/`aec83856…` bound to a key ARN of
+        the real length (`render_governance_sizes.py`). Revision 4's 3867
+        had neither the new denies nor the binding.
       - **Identity**
         `policy/issue215-seed/{env}/identity/I-GitHubGovernanceApply-api-gateway-infrastructure`.
-        It is seed-owned and grants the same set as the ceiling, so it
-        renders at the same size, 5866. It is seed-owned rather than
+        It is seed-owned and grants the same statements as the ceiling.
+        **Measured (revision 5): 5737 characters**, rendered separately by
+        the script. It is seed-owned rather than
         written by the operator stack, as USI's governance identity is.
         Today's operator guards close the operator's role writes and role
         reads to a fixed role list (`455fe8d0…`, `fabd8598…` in TEST), so
@@ -337,7 +370,7 @@ ECS tasks.
         `governance` project, in the same backend
         `s3://pulumi-bootstrap-infrastructure-{env}-state/governance`. This
         is chosen so that `_validate_backend` (`governance_automation.py`
-        line 271, which requires `/governance`) holds, and the shared
+        line 270, which requires `/governance`) holds, and the shared
         Preview/Drift guards' lock deny (`167f653d…` TEST, `e90f172a…`
         PROD: puts and deletes allowed only under
         `governance/.pulumi/locks/*`) needs no amendment. Residual: USI's
@@ -387,24 +420,56 @@ ECS tasks.
       - `339af045…` (policy reads: four Apply-role policies and the two
         gateway boundaries; `f16f9131…` at `ff2eaf29…`);
       - `0d44e2be…` (bucket reads: two gateway buckets);
-      - `011f1685…` (KMS reads: `Repository` and `Purpose` lists; the
-        lists allow cross-combinations of the two repositories' tags, which
-        is acceptable for read-only describe actions);
       - `2be63eb2…` (`logs:DescribeResourcePolicies` added to the
-        Resource-`*` read statement);
-      - PROD `3899b5e7…`, `5a0f6c90…`, `ec801503…`, `6227eeae…`,
-        `2be63eb2…`.
+        Resource-`*` read statement; an allowed non-exact form, because
+        that action has no resource-level support, which V-A8 confirms);
+      - PROD `3899b5e7…`, `ec801503…`, `6227eeae…`, `2be63eb2…`.
 
-      One new statement is added: `apigateway:GET` on `/account`. No
+      Two new statements are added: `apigateway:GET` on `/account`, and
+      the gateway KMS read in **its own statement**. That statement is
+      `kms:DescribeKey`, `GetKeyPolicy`, `GetKeyRotationStatus` and
+      `ListResourceTags` on `key/*`, conditioned on
+      `Repository = api-gateway-infrastructure`, the environment and
+      `Purpose` ∈ {`pulumi-secrets`, `gateway-logs`}. USI's `011f1685…`
+      is not merged, so there are no cross-combined tag lists
+      (readiness F6). No
       backend statement changes, because the gateway stack stays under
       `governance/`. The statements shared with USI's Apply ceiling (TEST
       `69f23143…`, `d4192129…`, `94a9f77e…`; PROD `7741f40a…`,
       `8cc37f1f…`, `c911c28b…`) are not edited, so USI's Apply ceiling
-      stays byte-identical. **Measured: 3789 → 5104 (TEST) and 3799 →
-      5114 (PROD); 3889 → 5204 at #284's `ff2eaf29…`.** These come from
-      `evidence/render_governance_sizes.py`, and all are under 6144
-      (V-A12). Separate new statements would not fit: the revision-4
-      audit measured 6648 / 6658 for that construction.
+      stays byte-identical. **Shared headroom (V-A13):** USI's own plan
+      also adds each new USI managed-policy ARN to the same policy-read
+      statement of both shared ceilings (USI `architecture.md` lines
+      1947-1968; `epics-stories.md` lines 3598-3610). These additions come
+      from S5.2, before the gateway slot, and from XP-11 and S5.24a/b,
+      after it. On TEST after #284, 2255 characters are free; the gateway
+      takes 1630, leaving 625 for all of USI's additions. G1.1 renders
+      against the actual result catalog of the slot's predecessor (USI
+      row 34), and CR-A2 gives the USI owner the remaining budget. A
+      rebased USI operation that would push either shared ceiling above
+      6144 is a STOP for both owners, and restructuring the ceiling is a
+      user decision. **Measured (revision 5): 3789 → 5419 (TEST)
+      and 3799 → 5429 (PROD); 3889 → 5519 at #284's `ff2eaf29…`.** These
+      come from `evidence/render_governance_sizes.py`, and all are under
+      6144 (V-A12). Separate new statements for every read would not fit:
+      the revision-4 audit measured 6648 / 6658 for that construction.
+    - **Allowed non-exact forms (the complete list; anything else is a
+      G1.1 STOP).**
+      1. Actions without resource-level support on Resource `*`, each
+         confirmed by V-A8. These are `sts:GetCallerIdentity`,
+         `kms:ListAliases`, `access-analyzer:ValidatePolicy`,
+         `logs:DescribeResourcePolicies`, `kms:CreateKey` (tag-conditioned),
+         and `logs:PutResourcePolicy` only if V-A8 finds no scoped form.
+      2. KMS `key/*` with exact tag conditions (`Repository`,
+         `Environment`, `Purpose`), because key ids are generated.
+      3. S3 object paths bounded by the exact governance stack name.
+      4. The `e1ba4aab…`-derived IAM reads and policy writes on `*` that
+         the dedicated guard confines to exact ARNs.
+
+      **Conditional STOP (not decided):** if V-A8 finds no scoped form of
+      `logs:PutResourcePolicy` and the BI owner declines it on `*`, G1.5
+      stops for a user decision. D-A5 already excludes it from every
+      gateway CI role.
     - **Operator bindings and operator guards (still amended).** The
       shared Preview and Drift roles read the gateway through
       operator-written identity policies, as for USI:
@@ -506,9 +571,18 @@ ECS tasks.
        and `ref` trust, and their CI secrets would need an owner.
     4. **The trust subject list** is stricter (PD-14).
 
-    V-A10 is the BI owner's confirmation that the inventory extension is
-    acceptable. #285 avoided such an extension for its runtime roles
-    (research GR-19, K-16).
+    V-A10 asks the BI owner to **reverse a documented origin/main rule**,
+    and to accept that before any G1.1 code is written. Origin/main
+    enforces the opposite of the extension today:
+    - `tests/unit/test_poc_installation_boundary.py` lines 63-79 pin 55
+      policies, 24 principals and a 58-resource seed graph;
+    - `specs/219-test-workload-capability/installability-stop.md` lines
+      33-39 say to keep "the original catalog and activation protocol
+      intact";
+    - `scripts/operator_seed_installation.py` hard-codes the counts at
+      lines 165, 204, 209, 462, 517 and 542.
+
+    V-A10 stays a STOP (research GR-19, K-16).
 - **AD-A2 PR #34: adopt and amend (FR-A14, FR-A24; PD-9).**
   - **Kept:** `assert_test_target`, `only_validation_option`, the stack
     check, the certificate, the validation record with
@@ -653,11 +727,11 @@ ECS tasks.
   | Preview, Drift, Apply | `apigateway:GET` | `arn:aws:apigateway:eu-central-1::/restapis`, `/restapis/*`, `/vpclinks`, `/vpclinks/*`, `/domainnames`, `/domainnames/{fqdn}`, `/domainnames/{fqdn}/*`, `/tags/*`, `/account` | |
   | Preview, Drift, Apply | `wafv2:GetWebACL`, `GetLoggingConfiguration`, `GetWebACLForResource`, `ListTagsForResource`, `ListResourcesForWebACL`; `wafv2:DescribeManagedRuleGroup`, `ListAvailableManagedRuleGroups`, `CheckCapacity` | `regional/webacl/P/*` (for a REST stage, `GetWebACLForResource` and `ListResourcesForWebACL` are authorized on the web ACL, GA-17); the managed-rule and capacity actions on `*` only if V-A8 shows no resource-level support | |
   | Preview, Drift, Apply | `logs:DescribeLogGroups`; `logs:ListTagsForResource` | `log-group:*` (V-A8); the two gateway log groups | |
-  | Preview, Drift, Apply | `cloudwatch:DescribeAlarms`, `ListTagsForResource`; `sns:GetTopicAttributes`, `ListTagsForResource`, `ListSubscriptionsByTopic`; `kms:DescribeKey` | `alarm:P-*`; `…:sns:…:P-alarms`; `G` | |
+  | Preview, Drift, Apply | `cloudwatch:DescribeAlarms`, `ListTagsForResource`; `sns:GetTopicAttributes`, `ListTagsForResource`, `ListSubscriptionsByTopic`, `GetSubscriptionAttributes`; `kms:DescribeKey` | `alarm:P-*`; `…:sns:…:P-alarms`; `G` | |
   | Preview, Drift, Apply | `elasticloadbalancing:DescribeListeners`, `DescribeLoadBalancers`, `DescribeTags`; `ec2:DescribeSecurityGroups`, `DescribeSecurityGroupRules`, `DescribeSubnets`, `DescribeVpcs` | `*`, the read-only exceptions without resource-level support (V-A8 confirms each from the Service Authorization Reference) | |
   | Drift | evidence reads: `logs:StartQuery`, `GetQueryResults`, `FilterLogEvents`; `wafv2:GetSampledRequests` | the two gateway log groups (`GetQueryResults` on `*` if V-A8 says so); `regional/webacl/P/*` | |
   | Drift | `cloudwatch:PutMetricData` | `cloudwatch:namespace` = `ApiGatewayInfrastructure/{env}` (the probe metric) | |
-  | Apply | `apigateway:POST`, `PUT`, `PATCH` | `/restapis`, `/restapis/*`, `/vpclinks`, `/vpclinks/*`, `/domainnames`, `/domainnames/{fqdn}`, `/domainnames/{fqdn}/*`, `/tags/*`; creates and updates of `/restapis` require `apigateway:Request/DisableExecuteApiEndpoint` true (GA-7, V-A11) | |
+  | Apply | `apigateway:POST`, `PUT`, `PATCH` | `/restapis`, `/restapis/*`, `/vpclinks`, `/vpclinks/*`, `/domainnames`, `/domainnames/{fqdn}`, `/domainnames/{fqdn}/*`, `/tags/*`; creates and updates of `/restapis` require `apigateway:Request/DisableExecuteApiEndpoint` true (GA-7, V-A11). Writes on `/restapis/*` and `/vpclinks/*` carry `aws:ResourceTag/Owner = api-gateway-infrastructure` (and `aws:RequestTag/Owner` on create) where API Gateway supports the tag keys (V-A11). Where it does not, they are **accepted prefixes under NFR-A02**, because API Gateway generates the ids; this is recorded, not silent | |
   | Apply | `apigateway:SetWebACL` | `/restapis/*/stages/*` (required with `wafv2:AssociateWebACL` for REST stages; GA-17) | |
   | Apply | `apigateway:DELETE` | only `/restapis/*/deployments/*` (AD-A10 allowance) | |
   | Apply | `wafv2:CreateWebACL`, `UpdateWebACL`, `AssociateWebACL`, `PutLoggingConfiguration`, `DeleteLoggingConfiguration`, `TagResource` | `regional/webacl/P/*`, the stage ARN, the managed rule groups (`regional/managedruleset/*/*`) | |
@@ -789,6 +863,13 @@ ECS tasks.
     7. rate: a burst above PD-3 gets 429; the token-path rate rule blocks
        after its limit inside one window;
     8. access-log lines carry every AD-A5 field and no header or body;
+    8a. latency (NFR-A06): over a run of at least 10 minutes at the PD-3
+        rate, the p99 of (`responseLatency` − `integrationLatency`) from
+        the access log (Logs Insights, Drift role) is ≤ 100 ms;
+    8b. availability (NFR-A05): a read-only describe shows the VPC link's
+        ENIs and the USI subnets in two Availability Zones and the link
+        `AVAILABLE`, and a dry run of the rebuild runbook (PD-6) is
+        recorded with its timings;
     9. `SetAlarmState` on each alarm reaches the topic;
     10. two consecutive scheduled drift runs (weekday daytime) are clean
         and their probes succeed;
@@ -811,10 +892,12 @@ ECS tasks.
 
   | Gateway row | Must happen | USI row or step |
   | --- | --- | --- |
+  | 8 (G1.1 source packet, rendered against the seed baseline) | after | USI row 34's result catalog exists (V-A13; CR-A2) |
+  | 9 (G1.2 seed install, admission, activation and pin; TEST then PROD) | between | USI row 34 (S5.7) and USI row 42 (S5.18a, then XP-11), in the shared seed queue, after #284 (CR-A2; every later USI seed module rebases on the gateway result catalog) |
   | 15 (G4.1 TEST certificate) applied and handed over | before | row 42 (XP-11 needs the XP-10 ARN), hence before row 43 (gate 1) |
   | 19 (XP-A7 TEST descriptor) | after | row 43, S4.6 step 20 (D-A2) |
   | 20-25 (TEST front door, gate A-T steps 1-10 and 12) | before | S4.6 step 17, which USI runs after step 20 and holds for gate A-T step 10, two weekday drift runs (CR-A1) |
-  | 27 (G4.2 PROD certificate) applied and handed over | before | row 49 (XP-15), hence before row 52 (gate 2a) |
+  | 27 (G4.2 PROD certificate) applied and handed over | before | row 49 (XP-15), hence before row 52 (gate 2a). G4.2 follows G5.6's step-11 PR in C-program, at least 7 days of WAF logs after row 23, so USI row 49 waits on that too (G4.2 Needs) |
   | 28 (XP-A7 PROD descriptor), 30-32 (gate A-P) | after | row 52 (gate 2b and the PROD apply) |
 
   USI S4.6 step 17's "S5.16 has merged" means gateway row 24 applied and
@@ -862,6 +945,33 @@ ECS tasks.
   and the per-stack contracts; `policy/` the CrossGuard pack;
   `docs/runbooks/` the runbooks.
 
+  **Offline `ci` stack (readiness F3).** The required `Structural Preview`
+  check runs on a local file backend with no credentials (AD-A11). With
+  the flags on, the program makes live invokes: the AD-A3 contract checks,
+  and the zone lookup that PR #34's certificate code performs. So a third
+  stack, `ci` (`Pulumi.ci.yaml`), exists, as USI uses a credential-less
+  `dev` stack (USI `.github/workflows/pulumi-pr-guardrails.yml` lines
+  29-34). It has:
+  - both flags on;
+  - fixture contracts under `contracts/user-service-backend/ci.json` and
+    a fixture zone;
+  - a closed config key `stub_live_invokes: true`, under which
+    `backend_contract.py` and `certificate.py` read fixtures instead of
+    calling AWS.
+
+  `config.py` rejects `stub_live_invokes` in any stack except `ci`, and
+  rejects `ci` with a real account id. The `ci` stack uses the local file
+  backend and the `passphrase` secrets provider (committed
+  `encryptionsalt`, fixed non-secret passphrase; it holds no secret), as
+  USI's `dev` stack does. The config rules that forbid a passphrase
+  provider and require the S3 backend URL exempt exactly `ci`. Tests:
+  - a `ci` preview with both flags on and no AWS credentials succeeds;
+  - `test` or `prod` with `stub_live_invokes` fails to load;
+  - the `test` and `prod` live checks cannot be disabled by any config
+    key.
+
+  `initialize-stack` and the deploy workflow never select `ci`.
+
 ## 4. IAM and state boundary; single-writer chains
 
 - **No IAM in this repository.** The program declares no `aws:iam/*`
@@ -890,10 +1000,11 @@ ECS tasks.
 | V-A5 | `SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09` with `STRICT` on a Regional custom domain through `pulumi-aws` 7.23.0 | provider source (GR-17) + TEST apply | G5.5 | `TLS_1_2`, recorded |
 | V-A6 | WAF logging succeeds with the BI pre-created resource policy and no `logs:PutResourcePolicy` | TEST apply | G5.4 | STOP; a new user decision (for example WAF logs to an S3 bucket); `logs:PutResourcePolicy` on `*` is excluded by D-A5 |
 | V-A7 | Which ACM actions support `aws:ResourceTag`, `acm:DomainNames` and `acm:ValidationMethod` (GA-16) | Service Authorization Reference (ACM), per action | G1.4a | user decision (AD-A7), not defaulted |
-| V-A8 | Which read actions lack resource-level support (`elasticloadbalancing:Describe*`, `ec2:Describe*`, `logs:DescribeLogGroups`, `logs:GetQueryResults`, `wafv2` list and capacity, `logs:CreateLogDelivery`) | Service Authorization Reference JSON (as the USI plan fetched it, revision 12) | G1.4a, G1.4b | none: an action with resource-level support gets exact resources |
-| V-A9 | Access logging works with the scoped CloudWatch role and a KMS log group | TEST (gate A-T step 8) | G1.5, G5.6 | the AWS managed policy, only by user decision |
-| V-A10 | The BI owner accepts the seed inventory extension of D-A1: the new seed-created service principal kind, the count and kind changes in `policy_registry.py`, and the Add-row and activation validators in `operator_seed_installation.py`. #285 avoided such an extension (GR-19). | BI owner, G1.1 review | G1.1 | STOP; escalate to the user. There is no silent fallback to an independent stack. |
-| V-A12 | Every new or amended governance ceiling, guard and identity renders at ≤ 6144 characters in canonical JSON | Measured for revision 4 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`): dedicated Apply ceiling 5866 (TEST, PROD); its guard 3867; its identity 5866; shared Preview/Drift ceilings 3789/3799 → 5104/5114 (TEST/PROD), 3889 → 5204 at `ff2eaf29…`; USI's Apply ceiling unchanged at 5752 / 5762. G1.1 re-renders them as a test | G1.1 | **Resolved by D-A11.** If any G1.1 render exceeds 6144, STOP and escalate; no wildcard compaction |
+| V-A8 | Which actions lack resource-level support (`elasticloadbalancing:Describe*`, `ec2:Describe*`, `logs:DescribeLogGroups`, `logs:GetQueryResults`, `wafv2` list and capacity, `logs:CreateLogDelivery`, `logs:DescribeResourcePolicies`), and whether `logs:PutResourcePolicy` has a scoped form for the WAF-log policy (readiness F6) | Service Authorization Reference JSON (as the USI plan fetched it, revision 12) | G1.4a, G1.4b | none: an action with resource-level support gets exact resources |
+| V-A9 | Access logging works with the scoped CloudWatch role and a KMS log group, and API Gateway accepts the role's trust with `aws:SourceAccount` | TEST (gate A-T step 8); the trust condition by the G1.2 activation readback and the first `GetAccount` after G1.5 | G1.2, G1.5, G5.6 | by user decision, either the AWS managed policy or a trust without `aws:SourceAccount`. Because the logging role's identity and trust are seed-owned, the fallback is a seed amendment in its own XP-A4 slot (XP-A1) |
+| V-A10 | The BI owner reverses origin/main's documented rule against extending the seed inventory, before any G1.1 code. Today the rule is enforced by `tests/unit/test_poc_installation_boundary.py` 63-79, `specs/219-test-workload-capability/installability-stop.md` 33-39, and the hard-coded counts in `operator_seed_installation.py` 165/204/209/462/517/542. The BI owner then accepts the new seed-created service principal kind, the count and kind changes in `policy_registry.py`, and the Add-row and activation validators. | BI owner, G1.1 review | G1.1 | STOP; escalate to the user. There is no silent fallback to an independent stack. |
+| V-A12 | Every new or amended governance ceiling, guard and identity renders at ≤ 6144 characters in canonical JSON | Measured for revision 5 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`, real replica names, `SeedKmsKeyArn` bound): dedicated Apply ceiling 5737 and identity 5737 (TEST, PROD); dedicated guard 5198; shared Preview/Drift ceilings 3789/3799 → 5419/5429 (TEST/PROD), 3889 → 5519 at `ff2eaf29…`; USI's Apply ceiling unchanged at 5752 / 5762. G1.1 re-renders them as a test | G1.1 | **Resolved by D-A11.** If any G1.1 render exceeds 6144, STOP and escalate; no wildcard compaction |
+| V-A13 | The shared Preview/Drift ceilings stay ≤ 6144 with both plans' additions: USI's S5.2 (before the gateway slot), the gateway's, and USI's XP-11 and S5.24a/b (after it) | G1.1 renders against the row-34 result catalog; each later USI seed module re-renders on its rebased baseline (CR-A2) | G1.1, and each later USI module | STOP for both owners; restructuring the shared ceiling is a user decision |
 | V-A11 | The API Gateway condition key `apigateway:Request/DisableExecuteApiEndpoint` on `/restapis` creates | docs (GA-7) + simulator | G1.4b | the policy pack alone enforces it |
 
 ## 6. Well-Architected mapping
