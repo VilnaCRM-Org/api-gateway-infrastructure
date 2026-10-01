@@ -1,0 +1,4 @@
+# BMAD planning bundles under specs/ are hash-pinned (sha256 blocks in each
+# run-summary.md). Auto-formatting them would invalidate the pins, and
+# Prettier 3.3 rewrites multi-line code spans inside nested lists.
+specs/

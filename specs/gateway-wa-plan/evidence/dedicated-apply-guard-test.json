@@ -1,0 +1,193 @@
+{
+ "Statement": [
+  {
+   "Action": [
+    "iam:CreateRole",
+    "iam:DeleteRole",
+    "iam:DeleteRolePermissionsBoundary",
+    "iam:DeleteServiceLinkedRole",
+    "iam:PutRolePermissionsBoundary",
+    "sts:AssumeRole*",
+    "sts:AssumeRoot",
+    "sts:GetFederationToken",
+    "sts:GetSessionToken"
+   ],
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": "iam:DetachRolePolicy",
+   "Condition": {
+    "ArnLike": {
+     "iam:PolicyARN": "arn:aws:iam::891377212104:policy/issue215-seed/test/guard/*"
+    }
+   },
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": [
+    "iam:Add*",
+    "iam:Attach*",
+    "iam:Create*",
+    "iam:Delete*",
+    "iam:Detach*",
+    "iam:PassRole",
+    "iam:Put*",
+    "iam:Remove*",
+    "iam:Set*",
+    "iam:Tag*",
+    "iam:Untag*",
+    "iam:Update*"
+   ],
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::891377212104:oidc-provider/token.actions.githubusercontent.com",
+    "arn:aws:iam::891377212104:policy/GovernanceBoundary-user-service-infrastructure-test",
+    "arn:aws:iam::891377212104:policy/GovernanceReplicationBoundary-user-service-infrastructure-test",
+    "arn:aws:iam::891377212104:policy/PlatformBoundary-backup-test",
+    "arn:aws:iam::891377212104:policy/PlatformBoundary-control-test",
+    "arn:aws:iam::891377212104:policy/PlatformBoundary-log-replication-test",
+    "arn:aws:iam::891377212104:policy/PlatformBoundary-state-replication-test",
+    "arn:aws:iam::891377212104:policy/issue215-seed/test/*",
+    "arn:aws:iam::891377212104:role/GitHubOperatorApply-test",
+    "arn:aws:iam::891377212104:role/GitHubOperatorDrift-test",
+    "arn:aws:iam::891377212104:role/GitHubOperatorPreview-test"
+   ]
+  },
+  {
+   "Action": [
+    "iam:Add*",
+    "iam:Attach*",
+    "iam:Create*",
+    "iam:Delete*",
+    "iam:Detach*",
+    "iam:Put*",
+    "iam:Remove*",
+    "iam:Set*",
+    "iam:Tag*",
+    "iam:Untag*",
+    "iam:Update*"
+   ],
+   "Effect": "Deny",
+   "Resource": "arn:aws:iam::891377212104:role/aws-config-recorder-role-test"
+  },
+  {
+   "Action": "iam:CreateServiceLinkedRole",
+   "Condition": {
+    "StringNotEquals": {
+     "iam:AWSServiceName": [
+      "budgets.amazonaws.com",
+      "guardduty.amazonaws.com",
+      "securityhub.amazonaws.com"
+     ]
+    }
+   },
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": "*",
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:s3:::issue215-independent-seed-891377212104-test",
+    "arn:aws:s3:::issue215-independent-seed-891377212104-test/*",
+    "arn:aws:kms:eu-central-1:891377212104:key/00000000-0000-0000-0000-000000000000",
+    "arn:aws:secretsmanager:eu-central-1:891377212104:secret:issue215-independent-seed/*"
+   ]
+  },
+  {
+   "Action": "iam:*",
+   "Effect": "Deny",
+   "NotResource": [
+    "arn:aws:iam::891377212104:oidc-provider/token.actions.githubusercontent.com",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-certificate",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-front-door",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-pulumi-backend",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-secret-read-deny",
+    "arn:aws:iam::891377212104:policy/issue215-seed/test/ceiling/GovernanceBoundary-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:policy/issue215-seed/test/ceiling/GovernanceReplicationBoundary-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/ApiGatewayCloudWatchLogs-test",
+    "arn:aws:iam::891377212104:role/GitHubCiApply-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiDrift-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiPreview-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/PulumiStateRepl-api-gateway-infrastructure-test"
+   ]
+  },
+  {
+   "Action": [
+    "iam:CreatePolicy",
+    "iam:CreatePolicyVersion",
+    "iam:DeletePolicy",
+    "iam:DeletePolicyVersion",
+    "iam:SetDefaultPolicyVersion",
+    "iam:TagPolicy",
+    "iam:UntagPolicy"
+   ],
+   "Effect": "Deny",
+   "NotResource": [
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-pulumi-backend",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-secret-read-deny",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-certificate",
+    "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-front-door"
+   ]
+  },
+  {
+   "Action": [
+    "iam:TagRole",
+    "iam:UntagRole",
+    "iam:UpdateAssumeRolePolicy",
+    "iam:UpdateRole",
+    "iam:UpdateRoleDescription"
+   ],
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::891377212104:role/GitHubCiApply-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiDrift-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiPreview-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/PulumiStateRepl-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/ApiGatewayCloudWatchLogs-test"
+   ]
+  },
+  {
+   "Action": "iam:AttachRolePolicy",
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::891377212104:role/GitHubCiDrift-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiPreview-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/PulumiStateRepl-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/ApiGatewayCloudWatchLogs-test"
+   ]
+  },
+  {
+   "Action": [
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy"
+   ],
+   "Condition": {
+    "ArnNotEquals": {
+     "iam:PolicyARN": [
+      "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-pulumi-backend",
+      "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-secret-read-deny",
+      "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-certificate",
+      "arn:aws:iam::891377212104:policy/GitHubCiApply-api-gateway-infrastructure-test-front-door"
+     ]
+    }
+   },
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": [
+    "iam:DeleteRolePolicy",
+    "iam:PutRolePolicy"
+   ],
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::891377212104:role/GitHubCiApply-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/ApiGatewayCloudWatchLogs-test"
+   ]
+  }
+ ],
+ "Version": "2012-10-17"
+}

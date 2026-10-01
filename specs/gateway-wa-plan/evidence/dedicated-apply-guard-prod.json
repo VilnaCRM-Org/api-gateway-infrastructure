@@ -1,0 +1,193 @@
+{
+ "Statement": [
+  {
+   "Action": [
+    "iam:CreateRole",
+    "iam:DeleteRole",
+    "iam:DeleteRolePermissionsBoundary",
+    "iam:DeleteServiceLinkedRole",
+    "iam:PutRolePermissionsBoundary",
+    "sts:AssumeRole*",
+    "sts:AssumeRoot",
+    "sts:GetFederationToken",
+    "sts:GetSessionToken"
+   ],
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": "iam:DetachRolePolicy",
+   "Condition": {
+    "ArnLike": {
+     "iam:PolicyARN": "arn:aws:iam::933245420672:policy/issue215-seed/prod/guard/*"
+    }
+   },
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": [
+    "iam:Add*",
+    "iam:Attach*",
+    "iam:Create*",
+    "iam:Delete*",
+    "iam:Detach*",
+    "iam:PassRole",
+    "iam:Put*",
+    "iam:Remove*",
+    "iam:Set*",
+    "iam:Tag*",
+    "iam:Untag*",
+    "iam:Update*"
+   ],
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::933245420672:oidc-provider/token.actions.githubusercontent.com",
+    "arn:aws:iam::933245420672:policy/GovernanceBoundary-user-service-infrastructure-prod",
+    "arn:aws:iam::933245420672:policy/GovernanceReplicationBoundary-user-service-infrastructure-prod",
+    "arn:aws:iam::933245420672:policy/PlatformBoundary-backup-prod",
+    "arn:aws:iam::933245420672:policy/PlatformBoundary-control-prod",
+    "arn:aws:iam::933245420672:policy/PlatformBoundary-log-replication-prod",
+    "arn:aws:iam::933245420672:policy/PlatformBoundary-state-replication-prod",
+    "arn:aws:iam::933245420672:policy/issue215-seed/prod/*",
+    "arn:aws:iam::933245420672:role/GitHubOperatorApply-prod",
+    "arn:aws:iam::933245420672:role/GitHubOperatorDrift-prod",
+    "arn:aws:iam::933245420672:role/GitHubOperatorPreview-prod"
+   ]
+  },
+  {
+   "Action": [
+    "iam:Add*",
+    "iam:Attach*",
+    "iam:Create*",
+    "iam:Delete*",
+    "iam:Detach*",
+    "iam:Put*",
+    "iam:Remove*",
+    "iam:Set*",
+    "iam:Tag*",
+    "iam:Untag*",
+    "iam:Update*"
+   ],
+   "Effect": "Deny",
+   "Resource": "arn:aws:iam::933245420672:role/aws-config-recorder-role-prod"
+  },
+  {
+   "Action": "iam:CreateServiceLinkedRole",
+   "Condition": {
+    "StringNotEquals": {
+     "iam:AWSServiceName": [
+      "budgets.amazonaws.com",
+      "guardduty.amazonaws.com",
+      "securityhub.amazonaws.com"
+     ]
+    }
+   },
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": "*",
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:s3:::issue215-independent-seed-933245420672-prod",
+    "arn:aws:s3:::issue215-independent-seed-933245420672-prod/*",
+    "arn:aws:kms:eu-central-1:933245420672:key/00000000-0000-0000-0000-000000000000",
+    "arn:aws:secretsmanager:eu-central-1:933245420672:secret:issue215-independent-seed/*"
+   ]
+  },
+  {
+   "Action": "iam:*",
+   "Effect": "Deny",
+   "NotResource": [
+    "arn:aws:iam::933245420672:oidc-provider/token.actions.githubusercontent.com",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-certificate",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-front-door",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-pulumi-backend",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-secret-read-deny",
+    "arn:aws:iam::933245420672:policy/issue215-seed/prod/ceiling/GovernanceBoundary-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:policy/issue215-seed/prod/ceiling/GovernanceReplicationBoundary-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/ApiGatewayCloudWatchLogs-prod",
+    "arn:aws:iam::933245420672:role/GitHubCiApply-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/GitHubCiDrift-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/GitHubCiPreview-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/PulumiStateRepl-api-gateway-infrastructure-prod"
+   ]
+  },
+  {
+   "Action": [
+    "iam:CreatePolicy",
+    "iam:CreatePolicyVersion",
+    "iam:DeletePolicy",
+    "iam:DeletePolicyVersion",
+    "iam:SetDefaultPolicyVersion",
+    "iam:TagPolicy",
+    "iam:UntagPolicy"
+   ],
+   "Effect": "Deny",
+   "NotResource": [
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-pulumi-backend",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-secret-read-deny",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-certificate",
+    "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-front-door"
+   ]
+  },
+  {
+   "Action": [
+    "iam:TagRole",
+    "iam:UntagRole",
+    "iam:UpdateAssumeRolePolicy",
+    "iam:UpdateRole",
+    "iam:UpdateRoleDescription"
+   ],
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::933245420672:role/GitHubCiApply-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/GitHubCiDrift-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/GitHubCiPreview-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/PulumiStateRepl-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/ApiGatewayCloudWatchLogs-prod"
+   ]
+  },
+  {
+   "Action": "iam:AttachRolePolicy",
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::933245420672:role/GitHubCiDrift-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/GitHubCiPreview-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/PulumiStateRepl-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/ApiGatewayCloudWatchLogs-prod"
+   ]
+  },
+  {
+   "Action": [
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy"
+   ],
+   "Condition": {
+    "ArnNotEquals": {
+     "iam:PolicyARN": [
+      "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-pulumi-backend",
+      "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-secret-read-deny",
+      "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-certificate",
+      "arn:aws:iam::933245420672:policy/GitHubCiApply-api-gateway-infrastructure-prod-front-door"
+     ]
+    }
+   },
+   "Effect": "Deny",
+   "Resource": "*"
+  },
+  {
+   "Action": [
+    "iam:DeleteRolePolicy",
+    "iam:PutRolePolicy"
+   ],
+   "Effect": "Deny",
+   "Resource": [
+    "arn:aws:iam::933245420672:role/GitHubCiApply-api-gateway-infrastructure-prod",
+    "arn:aws:iam::933245420672:role/ApiGatewayCloudWatchLogs-prod"
+   ]
+  }
+ ],
+ "Version": "2012-10-17"
+}

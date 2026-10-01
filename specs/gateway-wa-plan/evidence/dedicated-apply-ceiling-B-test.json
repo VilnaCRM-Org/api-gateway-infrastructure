@@ -1,0 +1,275 @@
+{
+ "Statement": [
+  {
+   "Action": [
+    "access-analyzer:ValidatePolicy",
+    "iam:CreatePolicy",
+    "iam:CreatePolicyVersion",
+    "iam:DeletePolicy",
+    "iam:DeletePolicyVersion",
+    "iam:GetOpenIDConnectProvider",
+    "iam:GetPolicy",
+    "iam:GetPolicyVersion",
+    "iam:GetRole",
+    "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListEntitiesForPolicy",
+    "iam:ListPolicyTags",
+    "iam:ListPolicyVersions",
+    "iam:ListRolePolicies",
+    "iam:ListRoleTags",
+    "iam:SetDefaultPolicyVersion",
+    "iam:TagPolicy",
+    "iam:UntagPolicy",
+    "kms:ListAliases",
+    "sts:GetCallerIdentity"
+   ],
+   "Effect": "Allow",
+   "Resource": "*"
+  },
+  {
+   "Action": [
+    "s3:CreateBucket",
+    "s3:DeleteBucket",
+    "s3:DeleteBucketPolicy",
+    "s3:GetAccelerateConfiguration",
+    "s3:GetBucketAcl",
+    "s3:GetBucketCORS",
+    "s3:GetBucketLocation",
+    "s3:GetBucketLogging",
+    "s3:GetBucketObjectLockConfiguration",
+    "s3:GetBucketOwnershipControls",
+    "s3:GetBucketPolicy",
+    "s3:GetBucketPolicyStatus",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:GetBucketRequestPayment",
+    "s3:GetBucketTagging",
+    "s3:GetBucketVersioning",
+    "s3:GetBucketWebsite",
+    "s3:GetEncryptionConfiguration",
+    "s3:GetLifecycleConfiguration",
+    "s3:GetReplicationConfiguration",
+    "s3:ListBucket",
+    "s3:PutBucketLogging",
+    "s3:PutBucketOwnershipControls",
+    "s3:PutBucketPolicy",
+    "s3:PutBucketPublicAccessBlock",
+    "s3:PutBucketTagging",
+    "s3:PutBucketVersioning",
+    "s3:PutEncryptionConfiguration",
+    "s3:PutLifecycleConfiguration",
+    "s3:PutReplicationConfiguration"
+   ],
+   "Effect": "Allow",
+   "Resource": [
+    "arn:aws:s3:::pulumi-api-gateway-infrastructur-3ca14569-eu-west-1-replication",
+    "arn:aws:s3:::pulumi-api-gateway-infrastructure-test-state"
+   ]
+  },
+  {
+   "Action": [
+    "kms:CancelKeyDeletion",
+    "kms:CreateAlias",
+    "kms:DeleteAlias",
+    "kms:DescribeKey",
+    "kms:DisableKey",
+    "kms:DisableKeyRotation",
+    "kms:EnableKey",
+    "kms:EnableKeyRotation",
+    "kms:GetKeyPolicy",
+    "kms:GetKeyRotationStatus",
+    "kms:ListResourceTags",
+    "kms:PutKeyPolicy",
+    "kms:ScheduleKeyDeletion",
+    "kms:UpdateAlias",
+    "kms:UpdateKeyDescription"
+   ],
+   "Condition": {
+    "StringEquals": {
+     "aws:ResourceTag/Environment": "test",
+     "aws:ResourceTag/Purpose": [
+      "pulumi-secrets",
+      "gateway-logs"
+     ],
+     "aws:ResourceTag/Repository": "api-gateway-infrastructure"
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "arn:aws:kms:eu-central-1:891377212104:key/*"
+  },
+  {
+   "Action": "kms:CreateKey",
+   "Condition": {
+    "StringEquals": {
+     "aws:RequestTag/Environment": "test",
+     "aws:RequestTag/Purpose": [
+      "pulumi-secrets",
+      "gateway-logs"
+     ],
+     "aws:RequestTag/Repository": "api-gateway-infrastructure"
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "*"
+  },
+  {
+   "Action": "kms:TagResource",
+   "Condition": {
+    "StringEquals": {
+     "aws:RequestTag/Repository": "api-gateway-infrastructure",
+     "aws:ResourceTag/Environment": "test",
+     "aws:ResourceTag/Purpose": [
+      "pulumi-secrets",
+      "gateway-logs"
+     ],
+     "aws:ResourceTag/Repository": "api-gateway-infrastructure"
+    },
+    "StringEqualsIfExists": {
+     "aws:RequestTag/Environment": "test",
+     "aws:RequestTag/Purpose": [
+      "pulumi-secrets",
+      "gateway-logs"
+     ]
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "arn:aws:kms:eu-central-1:891377212104:key/*"
+  },
+  {
+   "Action": [
+    "kms:CreateAlias",
+    "kms:DeleteAlias",
+    "kms:UpdateAlias"
+   ],
+   "Effect": "Allow",
+   "Resource": [
+    "arn:aws:kms:eu-central-1:891377212104:alias/pulumi-api-gateway-infrastructure-test-secrets",
+    "arn:aws:kms:eu-central-1:891377212104:alias/api-gateway-infrastructure-test-logs"
+   ]
+  },
+  {
+   "Action": [
+    "iam:AttachRolePolicy",
+    "iam:DeleteRolePolicy",
+    "iam:DetachRolePolicy",
+    "iam:PutRolePolicy"
+   ],
+   "Condition": {
+    "StringEquals": {
+     "iam:PermissionsBoundary": "arn:aws:iam::891377212104:policy/issue215-seed/test/ceiling/GovernanceBoundary-api-gateway-infrastructure-test"
+    }
+   },
+   "Effect": "Allow",
+   "Resource": [
+    "arn:aws:iam::891377212104:role/GitHubCiApply-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiDrift-api-gateway-infrastructure-test",
+    "arn:aws:iam::891377212104:role/GitHubCiPreview-api-gateway-infrastructure-test"
+   ]
+  },
+  {
+   "Action": [
+    "iam:DeleteRolePolicy",
+    "iam:PutRolePolicy"
+   ],
+   "Condition": {
+    "StringEquals": {
+     "iam:PermissionsBoundary": "arn:aws:iam::891377212104:policy/issue215-seed/test/ceiling/GovernanceReplicationBoundary-api-gateway-infrastructure-test"
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "arn:aws:iam::891377212104:role/PulumiStateRepl-api-gateway-infrastructure-test"
+  },
+  {
+   "Action": "iam:PassRole",
+   "Condition": {
+    "StringEquals": {
+     "iam:PassedToService": "s3.amazonaws.com"
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "arn:aws:iam::891377212104:role/PulumiStateRepl-api-gateway-infrastructure-test"
+  },
+  {
+   "Action": "iam:PassRole",
+   "Condition": {
+    "StringEquals": {
+     "iam:PassedToService": "apigateway.amazonaws.com"
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "arn:aws:iam::891377212104:role/ApiGatewayCloudWatchLogs-test"
+  },
+  {
+   "Action": [
+    "apigateway:GET",
+    "apigateway:PATCH"
+   ],
+   "Effect": "Allow",
+   "Resource": "arn:aws:apigateway:eu-central-1::/account"
+  },
+  {
+   "Action": "s3:GetBucketLocation",
+   "Effect": "Allow",
+   "Resource": "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state"
+  },
+  {
+   "Action": "s3:ListBucket",
+   "Condition": {
+    "StringLike": {
+     "s3:prefix": [
+      "governance",
+      "governance/*"
+     ]
+    }
+   },
+   "Effect": "Allow",
+   "Resource": "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state"
+  },
+  {
+   "Action": [
+    "s3:DeleteObject",
+    "s3:GetObject",
+    "s3:GetObjectVersion",
+    "s3:PutObject"
+   ],
+   "Effect": "Allow",
+   "Resource": [
+    "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state/governance/.pulumi/stacks/governance/test-api-gateway-infrastructure.*",
+    "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state/governance/.pulumi/history/governance/test-api-gateway-infrastructure/*",
+    "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state/governance/.pulumi/backups/governance/test-api-gateway-infrastructure/*",
+    "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state/governance/.pulumi/locks/organization/governance/test-api-gateway-infrastructure/*"
+   ]
+  },
+  {
+   "Action": "s3:GetObject",
+   "Effect": "Allow",
+   "Resource": "arn:aws:s3:::pulumi-bootstrap-infrastructure-test-state/governance/.pulumi/meta.yaml"
+  },
+  {
+   "Action": [
+    "kms:Decrypt",
+    "kms:DescribeKey",
+    "kms:Encrypt",
+    "kms:GenerateDataKey",
+    "kms:ReEncryptFrom",
+    "kms:ReEncryptTo"
+   ],
+   "Effect": "Allow",
+   "Resource": "arn:aws:kms:eu-central-1:891377212104:key/00000000-0000-0000-0000-000000000000"
+  },
+  {
+   "Action": [
+    "logs:DeleteResourcePolicy",
+    "logs:PutResourcePolicy"
+   ],
+   "Effect": "Allow",
+   "Resource": "arn:aws:logs:eu-central-1:891377212104:log-group:aws-waf-logs-api-gateway-infrastructure-test"
+  },
+  {
+   "Action": "logs:DescribeResourcePolicies",
+   "Effect": "Allow",
+   "Resource": "*"
+  }
+ ],
+ "Version": "2012-10-17"
+}
