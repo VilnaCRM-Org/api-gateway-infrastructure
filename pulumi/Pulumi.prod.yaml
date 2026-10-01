@@ -1,0 +1,16 @@
+# PROD stack (FR-A09, FR-A03). Account, region, backend URL and secrets
+# provider are pinned here and nowhere in Python. Initialise only through
+# the guarded `initialize-stack` path (G3.4), never by hand.
+secretsprovider: awskms://alias/pulumi-api-gateway-infrastructure-prod-secrets?region=eu-central-1
+config:
+  pulumi:disable-default-providers:
+    - "*"
+  aws:region: eu-central-1
+  aws:allowedAccountIds:
+    - "933245420672"
+  api-gateway-infrastructure:awsAccountId: "933245420672"
+  api-gateway-infrastructure:pulumiBackendUrl: s3://pulumi-api-gateway-infrastructure-prod-state
+  api-gateway-infrastructure:pulumiSecretsProvider: awskms://alias/pulumi-api-gateway-infrastructure-prod-secrets?region=eu-central-1
+  api-gateway-infrastructure:features:
+    certificate: false
+    front_door: false

@@ -37,13 +37,31 @@ Execute `make` or `make help` to see the full list of project commands.
 The list of the `make` possibilities:
 
 ```
-build           Builds the images (PHP, caddy)
-down            Stop the docker hub
-pulumi          Pulumi enables you to safely and predictably create, change, and improve infrastructure.
-sh              Log to the docker container
-start           Docker container with terraspace and terraform
-up              Start the container for development
+build           Build the development image (pinned, checksum-verified tools).
+clean           Remove containers, Python caches and coverage data.
+down            Stop the development container.
+help            Display the available Make targets.
+sh              Open a shell in the running development container (after make start).
+start           Build the image and start the development container.
+test            Run every test under tests/ on the frozen lockfile.
+test-lockfile   Fail when pyproject.toml and uv.lock disagree.
+up              Start the development container.
 ```
+
+The Python toolchain is [uv](https://docs.astral.sh/uv/) with the frozen, hash-pinned `uv.lock` at the repository root (Python 3.11, `pulumi-aws` 7.23.0). The Pulumi program lives in `pulumi/`; its stacks are `test`, `prod` and the offline `ci` stack (AD-A15), and `pulumi/app/config.py` refuses any stack config outside that closed shape.
+
+The `ci` stack runs the credential-free Structural Preview on a local file backend. It uses the `passphrase` secrets provider with an **intentionally empty, non-secret passphrase** (`PULUMI_CONFIG_PASSPHRASE=""`, as USI's `dev` stack does), and it holds no secret. Its account is the AWS documentation example account `123456789012`, never a real VilnaCRM account. `test` and `prod` refuse a passphrase provider and pin their own account, region, S3 backend and KMS key.
+
+### Program guardrails and G3.x hand-offs
+
+`pulumi/app/config.py` also refuses a `Pulumi.yaml` with anything beyond `name`, `description` and `runtime: python` (no `main`, `stackConfigDir`, project `config:` or runtime options); every stack sets `pulumi:disable-default-providers: ["*"]`; only the literal YAML booleans `true`/`false` count as booleans; and `pulumi/__main__.py` fails unless the engine's config (`PULUMI_CONFIG`) equals the checked stack file's `config:` mapping. That refuses per-key `PULUMI_CONFIG_<KEY>` overrides and a `--config-file` whose config differs; it does not see a `--config-file` that changes only the top-level `secretsprovider`, `encryptionsalt` or `encryptedkey`, nor the backend in use (hand-off F09).
+
+Recorded hand-offs from the G3.1 gate (attempt 1):
+
+- **F02 (before G3.3 / G4.1):** install the `aws` resource plugin 7.23.0 in the image from a pinned URL with a verified SHA-256, so previews never download an unpinned plugin.
+- **F06 (G3.4):** `test` and `prod` set `skip_metadata_api_check=False` (IMDS credential fallback, as USI does); harmless on GitHub-hosted runners, where the account pin still applies; reconsider if self-hosted EC2 runners are ever used.
+- **F09 (G3.4):** workflows never pass `--config`, `--config-file` or `--secrets-provider`, and preflight checks that `PULUMI_BACKEND_URL` equals the stack's `pulumiBackendUrl` and that the stack's secrets provider equals `pulumiSecretsProvider`.
+- **F07 (G3.2):** extend the 100% branch-coverage gate to `scripts/` and `policy/`, and replace the Poetry-era `pulumi/.flake8` and `pulumi/.pre-commit-config.yaml` with the G3.2 battery.
 
 ## Documentation
 Start reading at the [GitHub wiki](https://github.com/VilnaCRM-Org/infrastructure-template/wiki). If you're having trouble, head for [the troubleshooting guide](https://github.com/VilnaCRM-Org/infrastructure-template/wiki/Troubleshooting) as it's frequently updated.
