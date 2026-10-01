@@ -41,6 +41,10 @@ def _loader():
     def construct(loader, node, deep=False):
         seen = set()
         for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise yaml.constructor.ConstructorError(
+                    None, None, "merge keys (<<) are not allowed", key_node.start_mark
+                )
             key = loader.construct_object(key_node, deep=True)
             if key in seen:
                 raise yaml.constructor.ConstructorError(
@@ -54,15 +58,41 @@ def _loader():
 
 
 def load(text, violations):
+    """Parse exactly one document; multi-document files are violations."""
+    require_yaml()
+    loader = _loader()(text)
     try:
-        doc = yaml.load(text, Loader=_loader())  # noqa: S506 - safe subclass
+        doc = loader.get_single_data()
     except yaml.YAMLError as exc:
         violations.append(f"unparseable YAML: {exc}")
         return None
+    finally:
+        loader.dispose()
     if not isinstance(doc, dict):
         violations.append("top level must be a mapping")
         return None
     return doc
+
+
+def iter_strings(node):
+    """Yield every string (keys and values) in a parsed document."""
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for k, val in node.items():
+            yield from iter_strings(k)
+            yield from iter_strings(val)
+    elif isinstance(node, list):
+        for item in node:
+            yield from iter_strings(item)
+
+
+def has_secrets_key(node):
+    if isinstance(node, dict):
+        return "secrets" in node or any(has_secrets_key(v) for v in node.values())
+    if isinstance(node, list):
+        return any(has_secrets_key(i) for i in node)
+    return False
 
 
 def get_events(doc, violations):
@@ -138,10 +168,10 @@ def check_workflow(text):
             perms = job["permissions"] if "permissions" in job else top
             if not _perms_ok(perms):
                 v.append(f"job {name}: pull_request job must be contents: read only")
-        for n, line in enumerate(text.splitlines(), 1):
-            code = strip_comment(line)
-            if any(rx.search(code) for rx in SECRET_RES):
-                v.append(f"line {n}: secrets are forbidden in pull_request workflows")
+        if has_secrets_key(doc) or any(
+            rx.search(string) for string in iter_strings(doc) for rx in SECRET_RES
+        ):
+            v.append("secrets are forbidden in pull_request workflows")
     return v
 
 
@@ -165,14 +195,18 @@ ALLOWED_RUN = re.compile(
 FORBIDDEN_RUN = re.compile(
     r"\bgh\s+api\b|\bcurl\b|\bwget\b|\bgit\s+(push|commit|add|tag(?!\s+--list))\b"
 )
-SHELL_CHAINING = re.compile(r";|&&|\|\||\||`|\$\(")
+SHELL_CHAINING = re.compile(r";|&&|\|\||\||`|\$\(|#")
+JOB_KEYS = {"runs-on", "timeout-minutes", "permissions", "steps"}
+STEP_KEYS = {"name", "id", "uses", "with", "run", "if", "env"}
+ENV_KEYS = {"GH_TOKEN", "TAG"}
+WITH_KEYS = {"fetch-depth", "persist-credentials"}
 CHECKOUT_RE = re.compile(r"^actions/checkout@[0-9a-f]{40}$")
 
 
 def _commands(run):
     cmds, acc = [], ""
     for raw in str(run).splitlines():
-        line = strip_comment(raw).strip()
+        line = raw.strip()
         if not line:
             continue
         if line.endswith("\\"):
@@ -198,8 +232,11 @@ def check_autorelease(text):
         v.append(f"push filters must be exactly branches: [main], got {on['push']}")
     if doc.get("permissions") != {}:
         v.append("autorelease top-level permissions must be {}")
-    if re.search(r"\bsecrets\b", "\n".join(strip_comment(x) for x in text.splitlines())):
+    if any(re.search(r"\bsecrets\b", string) for string in iter_strings(doc)) or has_secrets_key(doc):
         v.append("autorelease must not reference secrets (use github.token)")
+    extra = set(doc) - {"name", "on", True, "concurrency", "permissions", "jobs"}
+    if extra:
+        v.append(f"top-level keys not allowed: {sorted(map(str, extra))}")
     jobs = doc.get("jobs") if isinstance(doc.get("jobs"), dict) else {}
     ran = 0
     for name, job in jobs.items():
@@ -209,9 +246,30 @@ def check_autorelease(text):
             v.append(f"job {name}: permissions must be exactly contents: write")
         if "uses" in job:
             v.append(f"job {name}: reusable workflows are not allowed")
+        bad = set(job) - JOB_KEYS
+        if bad:
+            v.append(f"job {name}: keys not allowed: {sorted(bad)}")
+        if job.get("runs-on") != "ubuntu-latest":
+            v.append(f"job {name}: runs-on must be ubuntu-latest")
         for step in job.get("steps") or []:
             if not isinstance(step, dict):
                 continue
+            bad = set(step) - STEP_KEYS
+            if bad:
+                v.append(f"step keys not allowed: {sorted(bad)}")
+            env = step.get("env") or {}
+            if not isinstance(env, dict) or set(env) - ENV_KEYS:
+                v.append(f"step env keys must be within {sorted(ENV_KEYS)}")
+            with_ = step.get("with") or {}
+            if not isinstance(with_, dict) or set(with_) - WITH_KEYS:
+                v.append(f"step with keys must be within {sorted(WITH_KEYS)}")
+            for key, val in step.items():
+                if key == "env" and isinstance(val, dict):
+                    val = {k: x for k, x in val.items() if k != "GH_TOKEN"}
+                if any("github.token" in x for x in iter_strings(val)):
+                    v.append(f"github.token is only allowed as env.GH_TOKEN (step key {key})")
+            if isinstance(env, dict) and env.get("GH_TOKEN", "${{ github.token }}") != "${{ github.token }}":
+                v.append("env.GH_TOKEN must be ${{ github.token }}")
             if "uses" in step and not CHECKOUT_RE.match(str(step["uses"])):
                 v.append(f"uses {step['uses']!r}: only actions/checkout@<sha> is allowed")
             if "run" in step:

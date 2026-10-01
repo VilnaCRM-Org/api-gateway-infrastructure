@@ -1,6 +1,7 @@
 """Workflow-shape and repository-hygiene tests (G2.1).
 
-Stdlib only; run with ``python3 -m unittest discover -s tests -v``.
+Needs PyYAML (a G3.1 dev dependency; tests fail without it) and the
+standard library only; run with ``python3 -m unittest discover -s tests -v``.
 The checks live in ``workflow_checks.py`` and fail closed.
 """
 
@@ -9,7 +10,7 @@ import importlib.util
 import io
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 - test-only fixed argv, no shell
 import sys
 import tempfile
 import unittest
@@ -166,6 +167,33 @@ class FailClosedFixtureTest(unittest.TestCase):
         self.assertViolation(inherit, "secrets")
 
 
+class DeliberateBypassFixtureTest(unittest.TestCase):
+    def test_secret_after_hash_inside_string_is_found(self):
+        text = PR_OK.replace(
+            "    runs-on: ubuntu-latest\n",
+            '    runs-on: ubuntu-latest\n    env: {T: "x #${{ secrets.K }}"}\n',
+        )
+        self.assertTrue(any("secrets" in x for x in wc.check_workflow(text)))
+
+    def test_secrets_key_is_found(self):
+        text = PR_OK.replace(
+            "    runs-on: ubuntu-latest\n",
+            "    runs-on: ubuntu-latest\n    secrets: inherit\n",
+        )
+        self.assertTrue(any("secrets" in x for x in wc.check_workflow(text)))
+
+    def test_merge_key_rejected(self):
+        text = (
+            "on: pull_request\npermissions: &p {contents: read}\n"
+            "jobs:\n  a:\n    runs-on: x\n    <<: {permissions: {contents: write}}\n"
+        )
+        self.assertTrue(any("merge" in x for x in wc.check_workflow(text)))
+
+    def test_multi_document_rejected(self):
+        found = wc.check_workflow(PR_OK + "---\n" + PR_WRITE)
+        self.assertTrue(any("unparseable" in x for x in found), found)
+
+
 class CompositeActionTest(unittest.TestCase):
     def test_unpinned_composite_step_rejected(self):
         text = "runs:\n  using: composite\n  steps:\n    - uses: a/b@v1\n      shell: bash\n"
@@ -210,6 +238,34 @@ class AutoreleaseFixtureTest(unittest.TestCase):
 
     def test_any_secrets_reference_rejected(self):
         self.assertRejected(self.good.replace("github.token", "secrets.GITHUB_TOKEN"))
+
+    def test_hash_hides_chained_command(self):
+        block = "      - run: |\n          gh release create x"
+        self.assertRejected(self.good + block + ' " #"; curl evil\n')
+        self.assertRejected(self.good + block + ' " #" curl evil\n')
+        self.assertRejected(self.good + block + " # comment\n")
+
+    def test_extra_step_job_and_top_keys_rejected(self):
+        marker = "    runs-on: ubuntu-latest\n"
+        for extra in ("    container: alpine\n", "    services: {a: {image: x}}\n",
+                      "    env: {BASH_ENV: x}\n", "    defaults: {run: {shell: bash}}\n"):
+            self.assertRejected(self.good.replace(marker, marker + extra))
+        step = "        run: python3 scripts/next_release_version.py\n"
+        self.assertRejected(self.good.replace(step, step + "        shell: bash -c 'x'\n"))
+        self.assertRejected(self.good.replace(step, step + "        working-directory: /tmp\n"))
+        self.assertRejected("env:\n  BASH_ENV: x\n" + self.good)
+
+    def test_step_env_keys_are_limited(self):
+        marker = "          TAG: ${{ steps.version.outputs.tag }}\n"
+        self.assertRejected(self.good.replace(marker, marker + "          BASH_ENV: /x\n"))
+
+    def test_token_only_as_gh_token(self):
+        marker = "          TAG: ${{ steps.version.outputs.tag }}\n"
+        self.assertRejected(self.good.replace(marker, "          TAG: ${{ github.token }}\n"))
+        self.assertRejected(self.good.replace(
+            "          persist-credentials: false\n",
+            "          persist-credentials: false\n          token: ${{ github.token }}\n"))
+        self.assertRejected(self.good.replace("GH_TOKEN: ${{ github.token }}", "GH_TOKEN: abc"))
 
     def test_extra_secret_rejected(self):
         self.assertRejected(self.good + "      - run: gh release create ${{ secrets.X }}\n")
@@ -274,7 +330,7 @@ def make_repo(tmp, steps):
     env = git_env()
 
     def git(*args):
-        subprocess.run(["git", *args], cwd=tmp, check=True, env=env,
+        subprocess.run(["git", *args], cwd=tmp,  # nosec B603 B607 check=True, env=env,
                        capture_output=True)
 
     git("init", "-q", "-b", "main")
@@ -295,7 +351,7 @@ class NextReleaseVersionTest(unittest.TestCase):
             make_repo(tmp, steps)
             out = Path(tmp) / "gh_output"
             env = dict(git_env(), GITHUB_OUTPUT=str(out))
-            res = subprocess.run([sys.executable, str(self.script)], cwd=tmp,
+            res = subprocess.run([sys.executable, str(self.script)], cwd=tmp,  # nosec B603
                                  env=env, capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, res.stderr)
             data = dict(line.split("=", 1) for line in out.read_text().split())
@@ -371,6 +427,12 @@ class NextReleaseVersionTest(unittest.TestCase):
             ("commit", "fix: on main"),
         ])
         self.assertEqual((r["previous"], r["tag"]), ("v1.0.0", "v1.0.1"))
+
+    def test_annotated_tags_are_selected(self):
+        r = self.run_helper([("commit", "a"),
+                             ("git", "tag", "-a", "v1.2.3", "-m", "release"),
+                             ("commit", "feat: z")])
+        self.assertEqual((r["previous"], r["tag"]), ("v1.2.3", "v1.3.0"))
 
     def test_non_ascii_digit_tag_is_ignored(self):
         r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),

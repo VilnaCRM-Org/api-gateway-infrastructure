@@ -15,7 +15,7 @@ Rules:
 
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 - fixed read-only git argv, no shell
 import sys
 
 TAG_RE = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$", re.ASCII)
@@ -28,7 +28,7 @@ FIELD_SEP = "\x1f"
 
 
 def git(args, cwd):
-    return subprocess.run(
+    return subprocess.run(  # nosec B603 B607 - fixed git argv, no shell
         ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
     ).stdout
 
