@@ -241,7 +241,7 @@ def test_coverage_target_uses_the_configured_threshold() -> None:
 def run_coverage(tmp_path: Path, call: str) -> int:
     module = tmp_path / "mod.py"
     module.write_text(
-        f"def f(x):\n    if x:\n        return 1\n    return 2\n\n\n{call}\n",
+        f"def f(x):\n    y = 0\n    if x:\n        y = 1\n    return y\n\n\n{call}\n",
         encoding="utf-8",
     )
     data = ["--data-file", str(tmp_path / ".cov")]
@@ -254,6 +254,7 @@ def run_coverage(tmp_path: Path, call: str) -> int:
 
 
 def test_branch_coverage_below_100_fails(tmp_path: Path) -> None:
+    # f(True) runs every statement; only the `if x` false branch is missed.
     assert run_coverage(tmp_path, "f(True)") == 2
 
 
