@@ -205,7 +205,8 @@ def test_zizmor_is_offline_locally_and_online_in_ci() -> None:
     job = wc.load(battery_text("security-scans.yml"), [])["jobs"]["zizmor"]
     step = job["steps"][-1]
     assert step["run"] == "make test-zizmor-online"
-    assert step["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    expression = "${{ github.token }}"  # the job token, not a literal secret
+    assert step["env"] == {"GH_TOKEN": expression}
     texts = [battery_text(f) for f in BATTERY_FILES]
     assert sum(text.count("github.token") for text in texts) == 1
 
