@@ -121,11 +121,13 @@ def test_github_only_checks() -> None:
     assert "with" not in review["steps"][0]
 
 
-def test_every_uses_is_sha_pinned_with_its_tag() -> None:
+def test_every_uses_is_sha_pinned() -> None:
+    """AGENTS.md rule 3: a full 40-hex commit SHA; a `# vX.Y.Z` comment is
+    allowed, not required (G3.2 F05)."""
     for wf in WF_DIR.glob("*.y*ml"):
         for line in wf.read_text(encoding="utf-8").splitlines():
             if re.match(r"\s*(-\s+)?uses:", line):
-                assert re.search(r"@[0-9a-f]{40}  # v\d+\.\d+\.\d+$", line), line
+                assert re.search(r"@[0-9a-f]{40}(\s+#.*)?$", line), line
 
 
 # --- Makefile targets ------------------------------------------------------
