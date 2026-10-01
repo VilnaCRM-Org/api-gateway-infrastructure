@@ -313,6 +313,21 @@ N_CASES: list[tuple[str, Mutation, str]] = [
         ),
         "no-ssm-resources",
     ),
+    # G33-F04: an aws:apigateway/account:Account (architecture section 4).
+    (
+        "apigateway-account",
+        lambda gr: (
+            gr
+            | {
+                "acct": Resource(
+                    P + "aws:apigateway/account:Account::account",
+                    "aws:apigateway/account:Account",
+                    {"cloudwatchRoleArn": "arn:aws:iam::111111111111:role/x"},
+                )
+            }
+        ),
+        "no-apigateway-account",
+    ),
     # The other AD-A10 rules.
     (
         "settings-logging-info",
@@ -565,6 +580,7 @@ def test_every_ad_a10_rule_is_a_policy() -> None:
         "vpc-link-integration-verifies-tls",
         "alarm-runbook-tag",
         "no-ssm-resources",
+        "no-apigateway-account",
         "stage-access-logs",
         "stage-logging-off-and-throttled",
         "mapped-stage-has-one-web-acl",

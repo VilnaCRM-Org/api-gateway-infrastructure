@@ -46,6 +46,9 @@ ALARM_TYPES = (
     "aws:cloudwatch/compositeAlarm:CompositeAlarm",
 )
 SSM_PREFIX = "aws:ssm/"
+# Architecture section 4 and AD-A5: the account's CloudWatch role is BI's;
+# this program never manages `aws.apigateway.Account`.
+APIGATEWAY_ACCOUNT = "aws:apigateway/account:Account"
 
 # AD-A4 / FR-A20. The V-A5 fallback (`TLS_1_2` "with a recorded reason") is
 # not accepted here: the plan does not say where the reason is recorded, so
@@ -188,6 +191,16 @@ def ssm_violations(resource: Resource) -> list[str]:
     return []
 
 
+def apigateway_account_violations(resource: Resource) -> list[str]:
+    """No `aws.apigateway.Account` (architecture section 4, AD-A5, AD-A9)."""
+    if resource.type == APIGATEWAY_ACCOUNT:
+        return [
+            "aws:apigateway/account:Account is not allowed: the account's "
+            "CloudWatch role belongs to BI governance."
+        ]
+    return []
+
+
 RESOURCE_RULES: tuple[tuple[str, str, Callable[[Resource], list[str]]], ...] = (
     (
         "rest-api-disables-execute-api-endpoint",
@@ -218,6 +231,11 @@ RESOURCE_RULES: tuple[tuple[str, str, Callable[[Resource], list[str]]], ...] = (
         "no-ssm-resources",
         "No aws:ssm/* resource (AD-A10, D-15).",
         ssm_violations,
+    ),
+    (
+        "no-apigateway-account",
+        "No aws:apigateway/account:Account (architecture section 4, AD-A5).",
+        apigateway_account_violations,
     ),
 )
 
