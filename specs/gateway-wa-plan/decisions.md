@@ -1,0 +1,66 @@
+# User decisions and open questions — API gateway Well-Architected track
+
+This file is a planning input. It holds three kinds of entry, and each is
+labelled:
+
+1. **Reused user decisions.** Decisions the user made on 2026-09-30 for the
+   user-service track, recorded in the USI bundle
+   (`VilnaCRM-Org/user-service-infrastructure`,
+   `specs/workload-wa-hardening/decisions.md`, sha256
+   `86df7c4f7b72ad49cbca328ec79884c792c1b3f833567f4a34586eb60d5259c6`, at USI
+   commit `9d5df4a`). This plan reuses them where they govern the gateway. It
+   does not restate them as new decisions.
+2. **Open questions (OQ-n).** Choices only the user can make. None is decided
+   here. Each has the plan's recommendation, and the stories that stop until
+   it is answered.
+3. **Planning defaults (PD-n).** Values the plan chose because a story needs
+   one. They are not user decisions. The user, the BI owner or `@Kravalg` may
+   change any of them in review.
+
+No decision in this file authorizes a live action. Every live action stays
+behind the per-action authorization of `prd.md` §2.
+
+## 1. Reused user decisions (dated 2026-09-30, USI bundle)
+
+| ID | Decision (short form) | How it governs the gateway |
+| --- | --- | --- |
+| D-3 | WAF placement: **REST API + WAF, private integration through a VPC link to the internal ALB.** V-10 decides between ALB-direct (VPC link V2) and an NLB fallback. | The whole front door (epic E-G5, E-G6). ALB-direct over VPC link V2 is the target shape; the NLB variant is a reviewed, recorded fallback only (AD-A4, V-A1). |
+| D-6 | The hard stop is split into two gates: gate 1 admits TEST, gate 2 admits PROD after TEST evidence exists. | The gateway gates A-T and A-P (AD-A12) sit inside the USI gate order: the TEST route is evidence for USI gate 1 (S4.6 step 17), and the PROD route follows USI gate 2. |
+| D-15 | The gateway certificate ARN is pinned in the reviewed USI workload contract and checked only with `acm:DescribeCertificate`. No CI role gets `ssm:GetParameter`. No identity deny, seed guard, seed boundary or catalog hash is loosened for SSM. | The gateway publishes nothing in SSM. PR #34's SSM parameter is dropped (AD-A2). The gateway owner hands the ARN to the USI owner (XP-A8). The same pattern, a reviewed contract pin, carries the USI coordinates into this repository (AD-A3). |
+| D-4 (consequence, not a new decision) | The runtime CMK encrypts the workload's log groups. The USI bundle records that "log groups outside this workload are outside D-4 (for example an AGI stage log group). The AGI owner decides them." | The KMS key for the gateway's log groups is open: OQ-2. |
+| D-14 | RPO ≤ 1 hour, RTO ≤ 24 hours for the user-service workload. | Scoped to the workload, not the gateway. The gateway holds no data; its RTO target is a planning default (PD-6), not D-14. |
+
+D-1, D-2, D-5, D-7 and D-8…D-13 do not govern a gateway resource. D-2 (PROD
+in-container TLS) concerns the ALB→task hop behind the gateway; this plan
+neither depends on it nor changes it.
+
+## 2. Open questions for the user (OQ)
+
+| ID | Question | Options | Recommendation | Stories that stop until answered |
+| --- | --- | --- | --- | --- |
+| OQ-1 | **How are the gateway repository's CI identities created?** The documented catalog onboarding (BI `AGENTS.md` lines 67-110: add the repository to `pulumi/repositories.governance.json` and let the governance stack create its roles) cannot run today: the seed guard on the governance apply role, `G-GitHubGovernanceApply`, denies `iam:CreateRole` on `*` (statement `dc27f076…`) and `iam:*` outside the USI ARNs (`8c068aaa…`) (BI `pulumi/seed/catalogs/test.json` lines 599-614; research GR-12). | (a) **Independent CloudFormation owner** (USI AD-26 layer 6 precedent): a reviewed per-environment stack creates the gateway CI roles and boundary through the reviewed non-root installer; the seed catalog registers them; no guard deny on Resource `*` is narrowed. (b) **Catalog route with guard narrowing:** a seed amendment removes `iam:CreateRole` from `dc27f076…` for the gateway names (or adds the gateway ARNs to `8c068aaa…` and lifts the create deny), so the governance stack creates the roles. This narrows a Resource-`*` deny, which the USI plan's NFR-06 rule allows only by user decision. | **(a).** It loosens no guard, reuses an approved precedent (#285), and keeps the gateway identities out of the governance stack's write scope. | G1.2, G1.1, G1.3 (and every later row) |
+| OQ-2 | **Which KMS key encrypts the gateway's log groups (stage access log, WAF log) and its alarm topic?** D-4 leaves this to the gateway owner. | (a) **A dedicated BI-owned gateway CMK per environment.** (b) Extend the D-4 runtime CMK's key policy to the gateway log-group ARNs. (c) No CMK (CloudWatch Logs default encryption). | **(a).** It keeps the gateway's blast radius apart from the workload's runtime data key, and D-4 deliberately left the gateway out. (c) does not meet the requirement for KMS-encrypted log groups. | G1.6, G5.2 |
+| OQ-3 | **What is the PROD public FQDN, and who owns its PROD hosted zone?** No repository names a PROD gateway domain (research GR-16). | Any FQDN under a public zone in PROD account `933245420672`. | Name the FQDN (the TEST pattern suggests `user.vilnacrm.com`) and the zone's owning repository or person. The zone must be in the PROD account, so that DNS validation and the alias record stay in one account. | G1.7, G4.2, G1.8, G6.x |
+| OQ-4 | **How does the WAF log delivery get its CloudWatch Logs resource policy?** WAF writes a log-group resource policy when logging is enabled, and the documented caller grant includes `logs:PutResourcePolicy` on `*` (GA-9). | (a) **BI pre-creates a resource policy** scoped to `aws-waf-logs-api-gateway-infrastructure-*` in the gateway prerequisites stack; the gateway Apply role gets only `logs:CreateLogDelivery`, `logs:DeleteLogDelivery`, `logs:DescribeResourcePolicies` and `logs:DescribeLogGroups`. (b) Grant the gateway Apply role `logs:PutResourcePolicy` on `*` (account-wide). (c) Send WAF logs to an S3 bucket owned by this repository instead. | **(a)**, provided V-A6 shows WAF accepts the pre-created policy. If V-A6 fails, the user chooses between (b) and (c); the plan does not default to (b). | G1.5, G5.4 |
+| OQ-5 | **What happens to a legacy gateway stack, if one exists?** PR #34 keeps the template's `my-bucket` resource "if the `test` stack already owns it". No repository file records a gateway Pulumi backend. | (a) Retire: the new governed backend starts empty; the legacy bucket, if found, is deleted by a reviewed admin action after an emptiness check. (b) Import it into the governed stack. (c) Leave it untouched and unmanaged. | **(a)**, after XP-A9 shows what exists. The bucket is a template example with no consumer. | G0.1 outcome only; G3.1 and G4.1 proceed in the new backend either way |
+| OQ-7 | **What provenance must the USI backend descriptor carry?** The USI spec says its authenticated publication is unimplemented and that a manually copied output "is not authority" (USI `specs/poc-api-gateway-backend.md` lines 10-15); no USI story implements the publication. | (a) **The gateway's own live re-verification is the authority:** the USI owner supplies the descriptor values with the USI apply run that created them; a reviewed gateway PR pins them; every gateway preview and drift re-reads each coordinate live (AD-A3), including the listener's certificate, which must be this repository's certificate. (b) Wait for a USI story that implements the authenticated publication (outside both plans today). | **(a)** for TEST and PROD. The certificate binding makes a wrong pin fail closed: only the USI listener carries this repository's certificate. (b) would leave the gateway with no start date. | rows 19 (XP-A7 TEST) and 31 (XP-A7 PROD) |
+| OQ-8 | **How does the TEST front door coexist with the USI abandon rehearsal?** USI S4.6 step 18 requires "no foreign ENI" in the application subnets, step 19 deletes those subnets and security groups, and step 20 rebuilds them with new ids (USI `epics-stories.md` lines 2866-2900, `prd.md` lines 393-402). A gateway VPC link built for step 17 has ENIs in those subnets and pins their ids. | (a) A gateway TEST teardown before USI step 18 (a reviewed manifest, a TEST-only gateway recovery role, `@Kravalg`'s approval: the D-7 pattern, which today covers only the USI workload) and a rebuild with a new pin after step 20. (b) USI retains the application subnets and the VPC-link security group in its abandon manifest (a USI plan change). (c) **USI runs step 17 after step 20**, against the rebuilt workload, so the gateway TEST route is built once, after the rebuild (a USI plan change that moves one step; no new gateway privilege). | **(c).** It needs no gateway delete privilege and no second build; the USI owner revises S4.6's step order. Under (c), step 17 waits after step 20 for the gateway rows 19-25 up to gate A-T step 10 (two weekday drift runs); the seven-day WAF step 11 is outside the step-17 bundle. If the user wants the USI plan unchanged, (a). | rows 19-25 timing; conditional rows 26-28 exist only under (a) |
+| OQ-6 | **PROD request limits.** The stage throttle and the WAF rate rules need numbers. TEST uses planning defaults PD-3 and PD-4. | Keep the TEST values, or set PROD values from the TEST load evidence (G5.6). | Set PROD values from the G5.6 evidence, recorded in the G6.2 PR, and have the user confirm them there. | G6.2 |
+
+## 3. Planning defaults (not user decisions)
+
+| ID | Default | Why | Who may change it |
+| --- | --- | --- | --- |
+| PD-1 | External-precondition numbering uses a **gateway-local namespace `XP-A1…XP-A14`**, not `XP-19+`. | The USI bundle owns `XP-1…XP-18`, and the USI plan may add more. A separate namespace avoids collisions. USI items keep their names when cited (USI XP-10, XP-15, XP-17). | User |
+| PD-2 | The toolchain moves from Poetry to **uv with a frozen lockfile**, Python 3.11, `pulumi-aws` pinned to **7.23.0**. | BI `AGENTS.md` lines 91-103 say to model a new service scaffold on `pulumi/user-service-infrastructure/`. USI runs `uv run --frozen` (USI `Makefile` line 96). 7.23.0 is the SDK whose `integration_target` and `DomainName.endpoint_access_mode` this plan verified (GA-1, GA-6). | BI owner, user |
+| PD-3 | TEST stage throttle: **rate 50 requests/s, burst 100**, on every method (`*/*`). | Bounded below the account-level quota (GA-12) and sized for a TEST service with no load data. | User (OQ-6 for PROD) |
+| PD-4 | TEST WAF rate rules: **2,000 requests per 5 minutes per source IP (block)** for all paths, plus **100 per 5 minutes per source IP** on the token path that G5.4 names from the user-service routes. | The WAF minimum is 10 (GA-10); these values stop crude floods without touching normal TEST use. | User (OQ-6 for PROD) |
+| PD-5 | Log retention: **TEST 90 days, PROD 365 days** for the access and WAF log groups. | Enough for incident review; the cost pillar caps it. | User |
+| PD-6 | Gateway recovery target: **rebuild from IaC within 24 hours**, the same bound as D-14's RTO. | The gateway holds no data; a rebuild through the saved-plan path restores it. D-14 itself names only the workload. | User |
+| PD-7 | **No ConfigRead roles for the gateway.** Role ARNs, backend URL and KMS alias are non-secret values held as protected-environment variables. | Fewer principals; nothing the gateway pipeline reads is secret. The BI reviewer may require the BI ConfigRead pattern instead (two more roles per environment). | BI owner |
+| PD-8 | WAF managed rule groups use the **default (auto-updating) version**, with `AWSManagedRulesCommonRuleSet` first in **Count** in TEST and switched to **Block** by G5.6 evidence. | The documented rollout for managed rules (GA-11). | User |
+| PD-9 | PR #34 is **adopted and amended**, not superseded (AD-A2). | Its certificate logic is fail-closed and tested; only the SSM parameter, the legacy bucket and the in-code pins conflict with this plan. | PR author, user |
+| PD-10 | Dependabot PRs #26, #32 and #33 are **closed, not rebased** (AD-A13). | Each is superseded by a story of this plan. | Repository maintainer |
+| PD-11 | `autorelease.yml` uses only the job's short-lived `GITHUB_TOKEN`, creates the tag and the GitHub release, and **stops committing `CHANGELOG.md` to `main`**; no workflow of this repository uses the `VILNACRM_APP_*` App private key any more. | The `main` ruleset has no bypass actor, so a bot commit to `main` would fail; the App private key is a long-lived secret this repository does not need. The org owner rotates or retires the key for other repositories. | User, org owner |
+| PD-12 | The state bucket is **replicated as BI replicates the USI backend**, so the identity stack also creates `PulumiStateRepl-api-gateway-infrastructure-{env}` with its replication boundary. | Same durability as the USI backend (BI `pulumi/infra/pulumi_state.py` lines 21, 84-150). | BI owner (may drop replication; then no fourth role) |
+| PD-13 | The TEST drift job and its probe run **on weekdays inside the USI TEST daytime window**; the TEST 5XX alarm needs a minimum request count. | USI TEST scales to zero on nights and weekends (USI FR-14 (c)), when the ALB answers 503. | User |
