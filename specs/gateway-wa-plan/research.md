@@ -7,7 +7,7 @@ branch: feat/gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a (origin/main)
 date: 2026-10-01
 status: planning-only
-revision: 2 (2026-10-01: GR-18…GR-20 added for D-A1; the options and risks tables carry the user decisions D-A1…D-A8)
+revision: 3 (2026-10-01: GR-18…GR-20 added for D-A1; the options and risks tables carry the user decisions D-A1…D-A10)
 ---
 
 # Technical research: the API gateway Well-Architected track
@@ -319,7 +319,7 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
   trust `ref:refs/heads/<branch>`. `docs/ci-config-trust-contract.md` lines
   11-14: "`test-pr` intentionally retains pull-request subjects". The USI
   Preview and Drift deployment roles also trust the `main` ref
-  (`ci_bootstrap.py` lines 353-380). This bears on OQ-10 and PD-14.
+  (`ci_bootstrap.py` lines 353-380). This bears on D-A10 and PD-14.
 
 ## 4. The user-service side (USI)
 
@@ -427,7 +427,7 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
 | Topic | Options | Recommendation or decision |
 | --- | --- | --- |
 | Front-door shape | Fixed by **D-3**: REST API + WAF, VPC link V2 → internal ALB; NLB fallback only after a failed V-A1. | D-3 (user, 2026-09-30). |
-| CI identity creation | (a) independent CloudFormation owner; (b) governance catalog route with guard narrowing (GR-12); (c) the BI seed registration route: a reviewed seed catalog amendment that creates and registers the roles (GR-18). | **D-A1** (user, 2026-10-01): the seed registration route, (c). Which BI owner writes the later grants and the non-role resources is OQ-9; ConfigRead roles are OQ-10. |
+| CI identity creation | (a) independent CloudFormation owner; (b) governance catalog route with guard narrowing (GR-12); (c) the BI seed registration route: a reviewed seed catalog amendment that creates and registers the roles (GR-18). | **D-A1** (user, 2026-10-01): the seed registration route, (c). Governance writes the later grants and the non-role resources after an exact-ARN seed admission (D-A9); no ConfigRead roles (D-A10). |
 | Cross-repo coordinates | (a) Pulumi `StackReference` to the USI stack (needs read access to the USI state bucket and KMS key: a broad cross-repository read); (b) SSM publication by USI (contradicts D-15's direction); (c) **a reviewed contract pin in this repository**, the D-15 pattern in the other direction, verified live by read-only describe calls. | **(c)**, the coordinator's instruction and the D-15 pattern; AD-A3. |
 | Certificate | (a) adopt PR #34 as is (SSM parameter, legacy bucket); (b) **adopt and amend**; (c) supersede with a new PR. | **(b)**, AD-A2, PD-9. |
 | Log KMS key | OQ-2. | **D-A4**: dedicated BI-owned gateway CMK per environment. |
@@ -455,4 +455,5 @@ Read through the worktrees `wt-boot-urllib3` (`862b4bf`, `origin/main`
 | K-14 | The USI descriptor's authenticated publication is unimplemented (GR-6). | D-A8; AD-A3 live re-verification. |
 | K-15 | The seed registry hard-codes its principal counts and treats `existing: false` as an operator executor (BI `pulumi/seed/policy_registry.py` lines 355, 431-446, 505-514, 570-590). | AD-A1: the seed creates the gateway principals as a new seed-created service kind and registers them, with inventory, installer and verifier changes in G1.1 (GR-18, GR-19; V-A10). |
 | K-16 | For new runtime roles, the BI owner chose a separate CloudFormation stack, not an extension of the seed inventory (GR-19). The BI owner may decline the inventory extension that D-A1 needs. | V-A10: the BI owner confirms the extension shape in G1.1's review. If it is declined, the story STOPs and goes back to the user. There is no silent fallback to an independent stack. |
-| K-17 | Governance cannot write any gateway IAM resource or create the gateway's S3, KMS and account-level resources. Its guard (`8c068aaa…`, `5366ec11…`) and its USI-scoped seed ceilings (`ceiling/GitHubGovernanceApply` `7a36d2ff…`, `a392c269…`, `00257170…`, `abfe3f39…`; `C-GitHubGovernancePreview`/`-Drift`) both block it, and the operator executor guards (`0c5eed92…`, `c18540fb…`, `408cdbf9…` in TEST) close the governance policy names to the USI ones. So the gateway's grants and non-role BI resources need an owner that the USI pattern does not give (GR-12, GR-18). | OQ-9 (user); option (b) lists the guard and ceiling amendments it needs. |
+| K-17 | Governance cannot write any gateway IAM resource or create the gateway's S3, KMS and account-level resources. Its guard (`8c068aaa…`, `5366ec11…`) and its USI-scoped seed ceilings (`ceiling/GitHubGovernanceApply` `7a36d2ff…`, `a392c269…`, `00257170…`, `abfe3f39…`; `C-GitHubGovernancePreview`/`-Drift`) both block it, and the operator executor guards (`0c5eed92…`, `c18540fb…`, `408cdbf9…` in TEST) close the governance policy names to the USI ones. So the gateway's grants and non-role BI resources need an owner that the USI pattern does not give (GR-12, GR-18). | D-A9: the G1.2 change set admits governance by exact ARNs (guard lists, ceilings, operator bindings, operator guards); AD-A1. |
+| K-18 | `ceiling/GitHubGovernanceApply` is 5752 (TEST) / 5762 (PROD) characters of 6144, and the D-A9 exact-ARN additions need 7187-8729 (revision-3 audit). | V-A12; OQ-11 (user). |

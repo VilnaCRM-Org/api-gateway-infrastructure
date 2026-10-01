@@ -1,9 +1,10 @@
 # User decisions and open questions — API gateway Well-Architected track
 
 This file is a planning input. Revision 2 (2026-10-01) records the user's
-answers to OQ-1…OQ-8. It holds five kinds of entry, and each is labelled:
+answers to OQ-1…OQ-8; revision 3 (2026-10-01) records the answers to OQ-9
+and OQ-10. It holds five kinds of entry, and each is labelled:
 
-1. **Gateway decisions (D-A1…D-A8).** Decisions the user made on 2026-10-01
+1. **Gateway decisions (D-A1…D-A10).** Decisions the user made on 2026-10-01
    for this track. They use a **gateway-local namespace `D-A#`**, as this
    bundle already does for `FR-A#`, `NFR-A#` and `XP-A#` (PD-1). The USI
    bundle owns `D-1…D-15` and may add `D-16+`, so `D-A#` cannot collide with
@@ -15,9 +16,9 @@ answers to OQ-1…OQ-8. It holds five kinds of entry, and each is labelled:
    `86df7c4f7b72ad49cbca328ec79884c792c1b3f833567f4a34586eb60d5259c6`, at USI
    commit `9d5df4a`). This plan reuses them where they govern the gateway. It
    does not restate them as new decisions.
-3. **Open questions (OQ-n).** Choices only the user can make. None is decided
-   here. Each lists its options and the stories that stop until it is
-   answered.
+3. **Open questions (OQ-n).** Choices only the user can make. OQ-1…OQ-10
+   are answered; OQ-11 is open. §3 keeps the OQ-9 and OQ-10 analysis and
+   their rejected alternatives.
 4. **Cross-plan change requests (CR-A#).** Changes that a gateway decision
    needs in the USI plan. This plan does not edit the USI bundle; the USI
    owner decides each request.
@@ -35,14 +36,16 @@ verbatim; the others are recorded in the words the answer was relayed in.
 
 | ID | Answers | User's wording | Decision | Consequence in this plan |
 | --- | --- | --- | --- | --- |
-| D-A1 | OQ-1 | "We should create basic roles and permissions in Bootstrap infrastructure for api gateway like we did for user service infrastructure." | **Enrol `api-gateway-infrastructure` in bootstrap-infrastructure the way `user-service-infrastructure` is enrolled: its roles enter the BI independent seed through a reviewed seed catalog amendment (the seed registration route), installed by the human seed operator.** They do not go through the governance-stack route, which the `G-GitHubGovernanceApply` guard statements `dc27f076…` and `8c068aaa…` block (research GR-12). The independent-CloudFormation-owner route (revision 1's recommendation) is **not** the chosen route. | AD-A1 (rewritten); FR-A01, FR-A02; G1.1, G1.2; XP-A1, XP-A4; V-A10. How the route mirrors USI is in AD-A1 and research GR-18…GR-20. AD-A1 lists every point where the gateway departs from the USI pattern. Role creation moves to the seed (decided here). The writer of grants and non-role resources (OQ-9) and the ConfigRead roles (OQ-10) cannot follow the pattern as it stands and are open. The trust subject list is stricter (PD-14). |
+| D-A1 | OQ-1 | "We should create basic roles and permissions in Bootstrap infrastructure for api gateway like we did for user service infrastructure." | **Enrol `api-gateway-infrastructure` in bootstrap-infrastructure the way `user-service-infrastructure` is enrolled: its roles enter the BI independent seed through a reviewed seed catalog amendment (the seed registration route), installed by the human seed operator.** They do not go through the governance-stack route, which the `G-GitHubGovernanceApply` guard statements `dc27f076…` and `8c068aaa…` block (research GR-12). The independent-CloudFormation-owner route (revision 1's recommendation) is **not** the chosen route. | AD-A1 (rewritten); FR-A01, FR-A02; G1.1, G1.2; XP-A1, XP-A4; V-A10. How the route mirrors USI is in AD-A1 and research GR-18…GR-20. AD-A1 lists every point where the gateway departs from the USI pattern. Role creation moves to the seed (decided here). The writer of grants and non-role resources (OQ-9) and the ConfigRead roles (OQ-10) could not follow the pattern as it stood; the user decided them as D-A9 and D-A10. The trust subject list is stricter (PD-14). |
 | D-A2 | OQ-8 | "gateway after rebuild, recommendation (c)" | **OQ-8 (c).** The TEST front door is applied only after USI S4.6 step 20, against the rebuilt workload, and built once. No gateway teardown, TEST recovery role or rebuild exists. | Rows 26-28 of revision 1 (G1.9, G5.7, G5.8) are removed and the later rows renumbered; FR-A25 rewritten; AD-A3, AD-A7, AD-A10, AD-A12, AD-A15; CR-A1 asks the USI owner for the step change. |
 | D-A3 | OQ-3 | "the PROD public hostname is user.vilnacrm.com" | **The PROD FQDN is `user.vilnacrm.com`. Its public hosted zone is in PROD account `933245420672`.** | XP-A11 resolved to "the zone exists, or is created, in the PROD account"; who creates it stays an external precondition (XP-A11). FR-A15, G1.7, G4.2, G6.x. |
-| D-A4 | OQ-2 | "accept the recommended defaults" | **OQ-2 (a): a dedicated BI-owned gateway CMK per environment** for the stage access log, the WAF log and the alarm topic. | FR-A06, AD-A14 (OQ-2 (b) and (c) dropped). Which BI owner creates the key is OQ-9. |
-| D-A5 | OQ-4 | "accept the recommended defaults" | **OQ-4 (a): BI pre-creates the CloudWatch Logs resource policy for `aws-waf-logs-api-gateway-infrastructure-*`. No gateway role ever gets `logs:PutResourcePolicy` on `*`.** | FR-A05, AD-A9, AD-A7 deny set, V-A6. If V-A6 fails, the story STOPs for a new user decision; `logs:PutResourcePolicy` on `*` is excluded. Which BI owner creates the policy is OQ-9. |
+| D-A4 | OQ-2 | "accept the recommended defaults" | **OQ-2 (a): a dedicated BI-owned gateway CMK per environment** for the stage access log, the WAF log and the alarm topic. | FR-A06, AD-A14 (OQ-2 (b) and (c) dropped). Governance creates the key (D-A9). |
+| D-A5 | OQ-4 | "accept the recommended defaults" | **OQ-4 (a): BI pre-creates the CloudWatch Logs resource policy for `aws-waf-logs-api-gateway-infrastructure-*`. No gateway role ever gets `logs:PutResourcePolicy` on `*`.** | FR-A05, AD-A9, AD-A7 deny set, V-A6. If V-A6 fails, the story STOPs for a new user decision; `logs:PutResourcePolicy` on `*` is excluded. Governance creates the policy (D-A9). |
 | D-A6 | OQ-5 | "accept the recommended defaults" | **OQ-5 (a): retire any legacy gateway stack or `my-bucket` after an emptiness check.** The new governed backend starts empty; a found legacy bucket is deleted by a reviewed admin action, with its own per-action authorization, only after a read-only check shows it empty. | G0.1 outcome; FR-A24. |
 | D-A7 | OQ-6 | "accept the recommended defaults" | **OQ-6: derive the PROD stage throttle and WAF rate limits from the TEST evidence of G5.6, recorded in the G6.2 PR, where the user confirms them.** | FR-A18, G6.2. |
 | D-A8 | OQ-7 | "accept the recommended defaults" | **OQ-7 (a): the gateway's own live re-verification of the USI coordinates is the authority.** The USI owner supplies the descriptor values with the USI apply run that created them; a reviewed gateway PR pins them; every gateway preview and drift re-reads each coordinate live, including the listener's certificate. | AD-A3, FR-A16, XP-A7, G5.1, G6.1. |
+| D-A9 | OQ-9 | option (b), "Governance, like USI" | **Governance owns the gateway's identity grants, backend, CMK and account-level settings, as it does for USI.** The G1.2 seed change set admits governance to the gateway by exact ARNs only (the #284 FR6 precedent), under the BI owner's review and `@Kravalg`'s approval: (1) the exact gateway role and policy ARNs added to the two `NotResource` lists of `G-GitHubGovernanceApply` (TEST `8c068aaa…`/`5366ec11…` at `ef419680…`, `21195ff8…`/`bb116727…` at `ff2eaf29…`; PROD `9fb811f6…`/`06267ab9…`); (2) exact gateway entries in `ceiling/GitHubGovernanceApply`, `C-GitHubGovernancePreview` and `C-GitHubGovernanceDrift`; (3) the governance roles' gateway identity policies added to the catalog's `operator_bindings`; (4) the five operator executor guards that name those policies amended (TEST `0c5eed92…`, `c18540fb…`, `408cdbf9…`; PROD `de33acbe…`, `0142330f…`, `7a337042…`). Governance gains an external-identity mode that reads the seed-created roles and creates none; `dc27f076…` is unchanged. | AD-A1 ("Governance admission"), AD-A7, AD-A9, AD-A14; FR-A02…FR-A06; G1.1, G1.2, G1.3…G1.8; seed policy count 64 (under OQ-11 (b) or (c); under (a): 30 / 9 / 66). This narrows two deny lists by exact ARNs: the recorded exception to the "no deny narrowed without a user decision" constraint (brief; readiness). Options (a) and (c) are rejected (§3). The exact-ARN admission into the governance Apply ceiling exceeds 6144 characters; how to restructure it is OQ-11 (open). |
+| D-A10 | OQ-10 | option (a), "None" | **No ConfigRead roles for the gateway.** Role ARNs, backend URL and key alias are non-secret protected-environment variables. | c = 0: 29 principals, 8 seed-created principals (under OQ-11 (b) or (c); under (a): 30 / 9 / 66); the Apply guard's secret-read statement has Resource `*` with no CI-secret exception (AD-A1); G3.4. Adding a reader later needs a reviewed seed catalog amendment and a new user decision. Options (b) and (c) are rejected (§3). |
 
 ## 2. Reused user decisions (dated 2026-09-30, USI bundle)
 
@@ -60,131 +63,107 @@ neither depends on it nor changes it.
 
 ## 3. Open questions for the user (OQ)
 
-OQ-1…OQ-8 are answered (§1). Two new questions follow from D-A1: the parts
-of the USI enrolment that the gateway cannot copy as they stand. This plan
-lists the options and their costs. It does not choose between them.
+**One question is open: OQ-11** (below), which the revision-3 audit
+raised while checking D-A9. OQ-1…OQ-8 are answered by D-A1…D-A8, and OQ-9
+and OQ-10, which followed from D-A1, are answered by D-A9 and D-A10 (§1). The
+analysis behind OQ-9 and OQ-10 is kept below, with the alternatives the
+user rejected, so that a later reviewer can see why the gateway departs
+from the USI pattern where it does.
 
-| ID | Question | Stories that stop until answered |
-| --- | --- | --- |
-| OQ-9 | **After the seed creates and registers the gateway roles (D-A1), which BI owner writes the gateway's permissions and its other BI resources?** These are the roles' identity grants (the basic backend access now, the AD-A7 capability grants later), the state backend (bucket, replica, secrets key), the gateway CMK (D-A4), and the account-level API Gateway logging setting and WAF-log resource policy (D-A5). | G1.1 (which documents the enrolment packet carries), G1.3, G1.4a, G1.5, G1.6, G1.4b, G1.7, G1.8 (rows 8, 10, 11, 16, 17, 18, 26, 29) |
-| OQ-10 | **Does the gateway get USI's ConfigRead roles and fixed CI secrets?** | G1.1 (role set), G1.2, G3.4 (where the deploy workflow reads its configuration) (rows 8, 9, 13) |
+### OQ-9 (answered by D-A9): why USI could not simply be copied
 
-### OQ-9: why USI cannot simply be copied, and the options
+For USI, the governance Pulumi stack writes the roles' identity documents
+(`pulumi-backend`, then `secret-read-deny` or `read-only`, then later
+capability documents; BI `pulumi/infra/governance.py` lines 414-476), the
+backend, its key and its CI secrets. For the gateway, governance is
+blocked by its seed guard (`8c068aaa…`, `5366ec11…`), by its USI-scoped
+seed ceilings, and by the operator executor guards that close the
+governance policy names to the USI ones (research GR-12, GR-18, GR-19,
+K-17). D-A9 removes those blocks by an exact-ARN admission in the G1.2
+change set (architecture AD-A1, "Governance admission").
 
-**Why.** For USI, the governance Pulumi stack writes all of these: the
-roles' identity documents (`pulumi-backend`, then `secret-read-deny` or
-`read-only`, then later capability documents; BI
-`pulumi/infra/governance.py` lines 414-476), the backend, its key and its
-CI secrets. Governance cannot do the same for the gateway, for two
-reasons (research GR-12, GR-18, GR-19, K-17):
+**Rejected alternatives (not live):**
 
-- **Its seed guard.** `G-GitHubGovernanceApply` denies `iam:*` outside the
-  USI ARNs (`8c068aaa…`) and policy writes outside the USI policies
-  (`5366ec11…`).
-- **Its seed ceilings,** which admit only USI resources.
+- **(a) Seed-owned.** The seed stack would hold the gateway identity
+  policies, the backend, the CMK and the account-level resources. No
+  guard or ceiling change, but every grant change becomes a seed
+  operation, and the seed stack, which today owns only IAM, would gain S3,
+  KMS and API Gateway resources.
+- **(c) Mixed.** The seed would own the grants, and independent BI
+  CloudFormation stacks the non-IAM resources. This brings back an
+  independent owner for non-role resources.
 
-**(a) Seed-owned.**
+### OQ-10 (answered by D-A10): why USI could not simply be copied
 
-- The seed stack also holds the gateway identity policies. They are
-  created with the roles, and changed later by seed amendments of in-place
-  policy-document updates (the #284 mechanism).
-- The backend, the CMK and the account-level resources become new resource
-  types in the seed stack.
-- No existing guard statement or ceiling changes.
-- Cost: every grant change is a seed operation in the queue shared with
-  USI (XP-A4), and the seed stack, which today owns only IAM, gains S3,
-  KMS, `AWS::ApiGateway::Account` and `AWS::Logs::ResourcePolicy`
-  resources (XP-A1 widened).
+USI has `GitHubCiConfigRead-user-service-infrastructure-{test,test-pr}` in
+TEST and `-{prod,prod-preview}` in PROD, each reading a fixed CI secret
+that governance creates (BI `pulumi/infra/ci_config.py` line 540). The
+`test-pr` reader trusts `repo:<slug>:pull_request`, and the `test` and
+`prod-preview` readers also trust `ref:refs/heads/main` (lines 202-230;
+`docs/ci-config-trust-contract.md` lines 11-14). AD-A1 allows exactly one
+environment subject per role.
 
-**(b) Governance-owned, as for USI.** The G1.2 enrolment change set also
-amends the governance roles' seed policies, in the same seed operation per
-account:
+**Rejected alternatives (not live):**
 
-- **The guard.** The exact gateway role and policy ARNs are added to the
-  two closed lists of `G-GitHubGovernanceApply`. Their statement ids
-  follow the baseline catalog: TEST `8c068aaa…` and `5366ec11…` at
-  origin/main `ef419680…`; `21195ff8…` and `bb116727…` at #284's
-  `ff2eaf29…`; PROD `9fb811f6…` and `06267ab9…`. #284 FR6 added one exact
-  USI policy ARN to the same two lists.
-- **The seed ceilings of the governance roles,** which today admit only
-  USI resources:
-  - `ceiling/GitHubGovernanceApply`:
-    - limits S3 bucket create and delete to the USI buckets (`7a36d2ff…`);
-    - allows `kms:CreateKey` only with `aws:RequestTag/Repository` set to
-      `user-service-infrastructure` (`a392c269…`);
-    - allows role-policy attach and put only on the USI roles with the
-      USI boundary (`00257170…`, `d35c02e1…`);
-    - allows `iam:PassRole` only of the USI replication role
-      (`abfe3f39…`);
-    - has no `apigateway` or `logs:PutResourcePolicy` action.
-  - `C-GitHubGovernancePreview` and `C-GitHubGovernanceDrift` scope their
-    IAM, S3, KMS and secret reads to USI (for example `6b2d4e23…`,
-    `0d44e2be…`, `011f1685…`).
+- **(b)** ConfigRead readers for `test`, `prod-preview` and `prod` only,
+  each with one environment subject, plus their CI secrets.
+- **(c)** A full USI mirror, including `test-pr` with its `pull_request`
+  subject.
 
-  Each ceiling needs exact gateway entries. G1.5 also needs
-  `apigateway:PATCH` on `/account`, `iam:PassRole` of the logging role to
-  `apigateway.amazonaws.com`, and `logs:PutResourcePolicy` scoped to the
-  gateway WAF-log policy. #285 likewise records that both "boundary and
-  guard" must be amended (`installability-stop.md` lines 55-59).
-- **The operator side.** The governance roles' own identity policies for
-  the gateway (for example `GitHubGovernanceApply-{env}-api-gateway-infrastructure-storage`
-  and `-iam`, which the BI operator stack writes, as it writes the USI
-  ones) must be added to the catalog's `operator_bindings` (`policy_write`,
-  `policy_read`). The operator executors' guards must also admit them:
-  the five `GitHubOperator*` guards that close the governance policy names to the USI ones (TEST `0c5eed92…` in `GitHubOperatorApply-iam-write`, `c18540fb…` in `GitHubOperatorApply-attachments`, `408cdbf9…` in the three `GitHubOperator*-iam-read` guards; PROD `de33acbe…`, `0142330f…`, `7a337042…`). Without that amendment the operator PR could not create,
-  attach or read those policies. Both are changes in the same G1.2
-  operation, followed by a reviewed operator PR before G1.3.
-- **The governance mode.** `dc27f076…` stays unchanged, so governance
-  still cannot create, delete or re-bound a role. A BI code change adds an
-  external-identity mode, in which governance reads the seed-created roles
-  and creates none. The gateway is added to
-  `pulumi/repositories.governance.json`. Governance then creates the
-  backend, the CMK and the grants through reviewed governance PRs (the USI
-  "PR C" flow).
-- Cost: the two `NotResource` deny lists gain exact ARNs, which narrows
-  those denies, so it needs this decision. The three governance ceilings
-  also widen, by exact gateway resources.
+Adding a reader later needs a reviewed seed catalog amendment (a new
+principal, its guard and the count change), a CI-secret owner, and a new
+user decision.
 
-**(c) Mixed.**
+### OQ-11 (open, raised by the revision-3 audit): the governance Apply ceiling has no room
 
-- The seed owns the roles and their identity grants, as in (a).
-- Reviewed independent BI CloudFormation stacks own only the non-IAM
-  resources: backend, CMK, account setting and resource policy.
-- This keeps S3, KMS and API Gateway resources out of the seed stack and
-  changes no guard or ceiling.
-- Cost: it brings back an independent owner, for non-role resources only.
+**Question.** D-A9 admits governance to the gateway by exact ARNs only.
+How should the admission into `ceiling/GitHubGovernanceApply` be
+restructured, given that it cannot fit?
 
-### OQ-10: why USI cannot simply be copied, and the options
+**Why it cannot fit.**
 
-**Why.** USI has `GitHubCiConfigRead-user-service-infrastructure-{test,test-pr}`
-in TEST and `-{prod,prod-preview}` in PROD (seed catalogs). Each reads a
-fixed CI secret `/user-service-infrastructure/ci/<suffix>` that governance
-creates (BI `pulumi/infra/ci_config.py` line 540). Two parts conflict with
-this plan:
+- A managed policy is limited to 6144 characters. The ceiling is the
+  governance Apply role's permissions boundary, and a role has exactly one
+  boundary, so the ceiling cannot be split into two policies.
+- The ceiling is already 5752 characters (TEST) and 5762 (PROD) in
+  canonical JSON, which leaves about 390.
+- The exact-ARN gateway additions take more than that:
+  - S3 buckets, CreateKey, KMS key management and aliases, role-policy
+    attach and put, `iam:PassRole` of the replication and logging roles,
+    `/account`, and the WAF-log resource policy.
+  - The audit rendered 7187-7924 characters, and about 8729 with the KMS
+    management entries (architecture AD-A1, "Size blocker"; V-A12).
+- The Preview and Drift ceilings (3789 / 3799) have room.
 
-1. **The trust.** The `test-pr` reader trusts `repo:<slug>:pull_request`
-   for every repository except BI (BI `ci_config.py` lines 213-216;
-   `docs/ci-config-trust-contract.md` lines 11-14 say it "intentionally
-   retains pull-request subjects"). The `test` and `prod-preview` readers
-   also trust `ref:refs/heads/main` (lines 217-229). AD-A1 allows exactly
-   one environment subject per role, with no `pull_request` or `ref`
-   subject.
-2. **The secrets.** On the seed route nothing creates the CI secrets:
-   governance creates them for USI, and the seed stack creates no secret.
+**Options (the plan does not choose):**
 
-**(a) No ConfigRead roles** (revision 1's PD-7). Role ARNs, the backend
-URL and the key alias are non-secret values, held as protected-environment
-variables.
+- **(a) A dedicated governance Apply role for the gateway.**
+  - The seed creates `GitHubGovernanceApply-api-gateway-infrastructure-{env}`
+    (name illustrative) with its own exact-ARN ceiling and a guard of the
+    `G-GitHubGovernanceApply` shape, and governance applies the gateway
+    entry under that role.
+  - USI's ceiling stays untouched, and exact ARNs are kept.
+  - Cost: governance needs a per-repository apply role. That is a BI code
+    change to governance's role selection, plus one more principal, its
+    ceiling and its guard per environment, so the counts become 30
+    principals, 9 seed-created principals and 66 policies. Its trust and environment also need
+    review.
+- **(b) Restructure the shared ceiling into a service-family form.**
+  - For example, resource patterns such as
+    `arn:aws:s3:::pulumi-*-infrastructure-*`, and conditions on
+    `aws:ResourceTag/Repository` listing both repositories.
+  - Cost: this departs from "exact ARNs only" in D-A9, and it rewrites
+    USI's existing ceiling, so it needs the user's decision and a USI
+    impact review.
+- **(c) Keep the non-IAM resources out of governance.**
+  - Revert the backend, the CMK and the account-level resources to D-A9's
+    rejected alternatives (a) or (c), and keep only the grants with
+    governance (the role-policy entries).
+  - Cost: this partly reverses D-A9.
 
-**(b) ConfigRead readers for `test`, `prod-preview` and `prod` only.** Each
-trusts exactly its one environment subject; there is no `test-pr` reader.
-The OQ-9 owner creates the fixed CI secrets
-`/api-gateway-infrastructure/ci/<suffix>`. Across the two accounts this
-adds three principals, their guards and three secrets.
-
-**(c) Full USI mirror, including `test-pr` with its `pull_request`
-subject.** This contradicts AD-A1's no-`pull_request` rule; the user would
-accept PR-triggered config reads.
+**Stories that stop until answered:** G1.1 (row 8), and every row that
+depends on it (BI rows 9 onward, and AGI rows 13-15 and 20-32 through
+their Needs).
 
 ## 4. Cross-plan change requests to the USI plan (CR-A#)
 
@@ -205,7 +184,7 @@ The USI owner decides CR-A1 in the USI bundle. Until it is accepted, row 19
 | PD-4 | TEST WAF rate rules: **2,000 requests per 5 minutes per source IP (block)** for all paths, plus **100 per 5 minutes per source IP** on the token path that G5.4 names from the user-service routes. | The WAF minimum is 10 (GA-10); these values stop crude floods without touching normal TEST use. | User (D-A7 sets PROD) |
 | PD-5 | Log retention: **TEST 90 days, PROD 365 days** for the access and WAF log groups. | Enough for incident review; the cost pillar caps it. | User |
 | PD-6 | Gateway recovery target: **rebuild from IaC within 24 hours**, the same bound as D-14's RTO. | The gateway holds no data; a rebuild through the saved-plan path restores it. D-14 itself names only the workload. | User |
-| PD-7 | **Superseded by OQ-10.** Revision 1 defaulted to no ConfigRead roles. D-A1 asks for USI-like roles, so the choice is now the user's (OQ-10 option (a) keeps it). | — | User |
+| PD-7 | **Superseded by D-A10** (no ConfigRead roles), which confirms revision 1's default as a user decision. | — | User |
 | PD-8 | WAF managed rule groups use the **default (auto-updating) version**, with `AWSManagedRulesCommonRuleSet` first in **Count** in TEST and switched to **Block** by G5.6 evidence. | The documented rollout for managed rules (GA-11). | User |
 | PD-9 | PR #34 is **adopted and amended**, not superseded (AD-A2). | Its certificate logic is fail-closed and tested; only the SSM parameter, the legacy bucket and the in-code pins conflict with this plan. | PR author, user |
 | PD-10 | Dependabot PRs #26, #32 and #33 are **closed, not rebased** (AD-A13). | Each is superseded by a story of this plan. | Repository maintainer |

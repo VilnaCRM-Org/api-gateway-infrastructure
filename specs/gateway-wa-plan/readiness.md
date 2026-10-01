@@ -4,10 +4,10 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-check-implementation-readiness 
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 2 (user decisions D-A1…D-A8 recorded; OQ-8 (a)-only rows removed)
-author: the planning agent that wrote revisions 1 and 2 (NOT an independent reviewer)
-independent_reviewer: none yet for revision 2
-status: PENDING independent review of revision 2
+revision: 3 (D-A9 and D-A10 recorded; no open user question)
+author: the planning agent that wrote revisions 1-3 (NOT an independent reviewer)
+independent_reviewer: none yet for revision 3
+status: PENDING independent review of revision 3
 ---
 
 # Implementation readiness
@@ -16,18 +16,20 @@ status: PENDING independent review of revision 2
 
 **Not PASS; pending an independent review.** The author of this file wrote
 the bundle, so this is a self-check, not a gate result. A fresh-context
-pre-commit audit and its recheck ran on revision 2 before its commit
+pre-commit audit and its recheck ran on each revision before its commit
 (below). The self-check finds the bundle complete enough for an
 independent readiness round. These items block implementation:
 
-- **Rows blocked by open user questions** (each row's "Needs"):
-  - OQ-9 → rows 8, 10, 11, 16, 17, 18, 26 and 29;
-  - OQ-10 → rows 8, 9 and 13.
+- **Open user question:** OQ-11, raised by the revision-3 audit. The
+  D-A9 admission does not fit the 6144-character governance Apply
+  ceiling with exact ARNs only (V-A12). It blocks row 8 and every row
+  that depends on it (BI rows 9 onward; AGI rows 13-15 and 20-32).
+- D-A1…D-A10 answer OQ-1…OQ-10.
 - **Row blocked by a verification item:** V-A10 (the BI owner accepts the
   seed inventory extension) → row 8.
 - **Rows blocked by external preconditions:**
-  - XP-A1 → row 9, and every seed operation that OQ-9 puts in rows 10,
-    11, 16-18, 26 and 29;
+  - XP-A1 → row 9, any later exact-ARN admission, and the API Gateway
+    service-linked role in row 16 if XP-A5 finds it missing;
   - XP-A3 → row 12;
   - XP-A4 → every seed slot;
   - XP-A5 → rows 16 and 22;
@@ -47,7 +49,7 @@ independent readiness round. These items block implementation:
   - row 27 before USI row 49;
   - rows 28-32 after USI row 52.
 
-## Checks performed (self-check, revision 2)
+## Checks performed (self-check, revision 3)
 
 | Check | Result |
 | --- | --- |
@@ -57,8 +59,11 @@ independent readiness round. These items block implementation:
 | Rows 26-28 of revision 1 removed, later rows renumbered | yes: G1.9, G5.7, G5.8 removed; rows 29-35 → 26-32; every in-bundle reference to a gateway row re-checked (USI row numbers unchanged) |
 | No OQ-8 (a) remnant | yes: no recovery role, `test-recovery` environment, teardown manifest, recovery guardrail mode or `detached` flag remains |
 | Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8, which reuse the G1.4a and G1.4b matrices in PROD |
-| D-A1 honoured: the gateway roles enter through a reviewed seed catalog amendment installed by the human seed operator; the governance-stack route is not used for role creation; the independent CloudFormation owner is not the chosen route | yes (AD-A1, FR-A01, FR-A02, G1.1, G1.2). The departures from USI are listed in AD-A1: role creation by the seed (D-A1), OQ-9, OQ-10 and the stricter trust (PD-14) |
-| No story narrows an existing seed guard statement on Resource `*` | yes. Only OQ-9 (b) would extend two `NotResource` lists and three governance ceilings by exact gateway entries, and only if the user chooses it |
+| D-A1 honoured: the gateway roles enter through a reviewed seed catalog amendment installed by the human seed operator; the governance-stack route is not used for role creation; the independent CloudFormation owner is not the chosen route | yes (AD-A1, FR-A01, FR-A02, G1.1, G1.2). The departures from USI are listed in AD-A1: role creation by the seed (D-A1), the governance admission (D-A9), no ConfigRead (D-A10) and the stricter trust (PD-14) |
+| D-A9 honoured: governance writes the gateway's grants, backend, CMK and account settings; the G1.2 change set admits it by exact ARNs only (two guard lists with per-baseline ids, three governance ceilings, operator bindings, five operator guards); external-identity mode; options (a) and (c) only as rejected alternatives | yes (decisions §1 and §3; AD-A1 "Governance admission"; FR-A02…FR-A06; G1.1…G1.8; XP-A1, XP-A4), except that the admission into `ceiling/GitHubGovernanceApply` cannot fit 6144 characters with exact ARNs: V-A12 fails today; OQ-11 is open and blocks G1.1 |
+| D-A10 honoured: no ConfigRead roles; c = 0; the Apply guard's secret-read statement has no CI-secret variant; a later reader needs a reviewed amendment | yes (AD-A1; FR-A01; G1.1; G3.4; decisions §3) |
+| Counts | per environment 29 principals (24 + 5), 21 existing roles, 8 seed-created principals (3 + 5), 64 policies (55 + 3 boundaries + 5 guards + 1 logging identity), under OQ-11 (b) or (c); under (a) 30 / 9 / 66; recomputed in AD-A1 and FR-A02 |
+| No story narrows an existing seed guard statement on Resource `*` | yes. **Recorded exception (D-A9):** the two `NotResource` lists of `G-GitHubGovernanceApply`, the three governance ceilings and the five operator guards gain exact gateway entries. Two of those guards (`c18540fb…`, `0142330f…`) are Resource-`*` denies with an `ArnNotEquals` condition and are named in the exception; `dc27f076…` does not change (brief, Constraints) |
 | No CI role gets `ssm:*`, `iam:*`, `iam:PassRole`, `iam:CreateServiceLinkedRole` | yes (AD-A7 deny set; AD-A1 guards; G1.4a and G1.4b matrices) |
 | D-15 honoured: no SSM write or read anywhere | yes (AD-A2 drops PR #34's parameter; the policy pack refuses `aws:ssm/*`) |
 | D-3 honoured: REST API + WAF + VPC link V2 → ALB; NLB only as reviewed fallback | yes (AD-A4, V-A1) |
@@ -66,12 +71,12 @@ independent readiness round. These items block implementation:
 | Gate order against USI gates stated, including the USI abandon rehearsal | yes (AD-A12 table; CR-A1) |
 | Every AWS claim cites a source | yes (research §5, GA-1…GA-17) |
 | Every repository claim cites file and line or a read-only API call | yes (research §2-§4; GR-18…GR-20 added for D-A1) |
-| Long-lived secrets | none created; the App private key use is dropped (PD-11); no PAT. Under OQ-10 (b) or (c) the plan would add fixed CI secrets, as USI has |
+| Long-lived secrets | none created; the App private key use is dropped (PD-11); no PAT; no CI secrets (D-A10) |
 
 ## User decisions
 
-- **Gateway decisions, dated 2026-10-01:** D-A1…D-A8 (`decisions.md` §1).
-  They answer OQ-1…OQ-8. The namespace is gateway-local, `D-A#` (PD-1).
+- **Gateway decisions, dated 2026-10-01:** D-A1…D-A10 (`decisions.md` §1).
+  They answer OQ-1…OQ-10. The namespace is gateway-local, `D-A#` (PD-1).
 - **Reused, dated 2026-09-30:** D-3, D-6, D-15 and the D-4 consequence
   (`decisions.md` §2).
 - No other user decision was invented. Every choice the plan needed and
@@ -81,8 +86,11 @@ independent readiness round. These items block implementation:
 
 | ID | Question | Options (no choice made by this plan) |
 | --- | --- | --- |
-| OQ-9 | Which BI owner writes the gateway's identity grants, backend, CMK and account-level prerequisites after the seed creates the roles | (a) the seed stack; (b) governance, after the G1.2 change set extends the governance guard's two `NotResource` lists by exact ARNs (#284 precedent) widens the three governance seed ceilings (Apply, Preview, Drift) by exact gateway S3, KMS, IAM-attach, `iam:PassRole`, `/account` and WAF-log-policy entries, and amends the five operator executor guards and the operator bindings that name the governance policies; (c) the seed for grants, plus independent BI stacks for the non-identity resources |
-| OQ-10 | Whether the gateway gets USI's ConfigRead roles and fixed CI secrets | (a) none (protected-environment variables); (b) readers for `test`, `prod-preview` and `prod`, each with one environment subject; (c) the full USI mirror, including the `pull_request` reader |
+| OQ-11 | How to restructure the D-A9 admission into `ceiling/GitHubGovernanceApply`, which cannot hold the exact-ARN additions within 6144 characters (V-A12) | (a) a dedicated, seed-created governance Apply role for the gateway with its own exact-ARN ceiling; (b) a service-family form of the shared ceiling (patterns or tag conditions, departing from exact ARNs and rewriting USI's ceiling); (c) keep the backend, CMK and account resources out of governance (partly reverses D-A9) |
+
+OQ-9 and OQ-10 are answered by D-A9 (option (b), governance) and D-A10
+(option (a), none); their rejected alternatives are kept in
+`decisions.md` §3.
 
 **Cross-plan request for the USI owner:** CR-A1. USI S4.6 step 17 runs
 after step 20 and is held for gate A-T step 10 (two weekday drift runs).
@@ -99,13 +107,13 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | Role | Items |
 | --- | --- |
 | BI owner | G1.x authorship; V-A10 (accepting the seed inventory extension); XP-A4 slot ordering with the USI queue; XP-A5 and XP-A12 read-backs |
-| Human seed operator (XP-A1) | G1.2 install, trust activation and pin evidence; every later seed amendment that OQ-9 makes a seed operation |
-| Reviewed installer (XP-A1, only under OQ-9 (c)) | the independent non-identity stacks |
+| Human seed operator (XP-A1) | G1.2 install with the D-A9 admission, trust activation and pin evidence; any later exact-ARN admission; the API Gateway SLR if missing |
+| Governance stack (`governance` environment) | G1.3…G1.8 governance PRs and applies, inside the admitted ARN set (D-A9) |
 | `@Kravalg` | seed and stack reviews, BI and AGI PR approvals, every protected-environment apply, XP-A3 admin apply |
 | Gateway owner | G0.1 and the D-A6 emptiness check, the certificate hand-offs (XP-A8), PR #34 amendment coordination |
 | USI owner | CR-A1; XP-A7 descriptors (TEST after S4.6 step 20); pinning the gateway ARNs (USI XP-10, XP-15); XP-A14 campaign coordination |
 | Owner of the `vilnacrm.com` PROD zone | XP-A11: the zone exists or is created in account `933245420672`; the zone id and the record permission |
-| User | OQ-9, OQ-10, XP-A10 endpoints, the D-A7 PROD values in the G6.2 PR, per-action authorizations |
+| User | OQ-11, XP-A10 endpoints, the D-A7 PROD values in the G6.2 PR, per-action authorizations |
 
 ## Skill applicability (devops-sdlc)
 
@@ -124,6 +132,20 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | backup-recovery | PD-6 rebuild |
 | incident-response | runbooks (NFR-A10) |
 | terraform-terraspace | not applicable |
+
+## Revision 3 pre-commit audit (fresh context, `claude-router:audit`)
+
+**Audit of the uncommitted revision 3: REFUTED** (1 major, 3 medium, 1 minor). It confirmed every statement id per baseline (guard lists, operator guards), the 55/24/21 baseline and the 64 arithmetic, the PRD counts, no forward dependency, no live OQ-9/OQ-10 leftover, and that only `specs/` changed. Resolutions:
+
+| # | Finding (short) | Resolution |
+| --- | --- | --- |
+| 1 | The exact-ARN admission into `ceiling/GitHubGovernanceApply` exceeds 6144 characters (5752/5762 now; 7187-8729 after) and the ceiling cannot be split | Recorded as a blocker, not compacted: AD-A1 "Size blocker", V-A12, G1.1 STOP and Needs; new open question **OQ-11** with options (decisions §3); research K-18 |
+| 2 | KMS management statements missing from the ceiling admission | `81c3805b`/`6f28ae7e`/`37942811` (PROD `c453626c`/`8fa820e5`/`baf46019`), a second Purpose value, both aliases (AD-A1) |
+| 3 | Operator guards `c18540fb`/`0142330f` are Resource-`*` denies | Named in the D-A9 exception (brief, readiness, AD-A1, G1.1 STOP) |
+| 4 | Preview, Drift and replication grants are inline, not ARNs | Fixed policy set split into managed ARNs and inline names; the new kind's inline allowance (AD-A1 registry list; G1.1 Work and acceptance; FR-A02) |
+| 5 | Operator bindings are catalog metadata, not rows; `policy_read_resources` missing | Removed from the Modify-row lists; `policy_read_resources` added |
+
+**Recheck (same auditor): REFUTED, narrowly.** Findings 1, 2, 3 and 5 FIXED; 4 PARTLY (the inline allowance was missing from the registry change list and G1.1). New: N1 (minor, the counts were stated unconditionally while OQ-11 is open) and N2 (nit, OQ-11's reach understated). All folded in: the inline allowance in AD-A1, G1.1 and FR-A02; counts qualified as "under OQ-11 (b) or (c); under (a) 30 / 9 / 66"; OQ-11 blocks row 8 and every dependent row. No third round ran.
 
 ## Revision 2 pre-commit audit (fresh context, `claude-router:audit`)
 

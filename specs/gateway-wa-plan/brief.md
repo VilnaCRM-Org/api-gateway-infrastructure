@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/1-analysis/bmad-create-product-brief (Create mode,
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 2 (2026-10-01: user decisions D-A1…D-A8 recorded)
+revision: 3 (2026-10-01: user decisions D-A1…D-A10 recorded)
 inputDocuments: [research.md, decisions.md, USI specs/workload-wa-hardening (commit 9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -93,7 +93,8 @@ delivered as its own governed track instead of the single USI story S5.16.
   their boundaries and guards, installed by the human seed operator; the
   backend, the capability grants, the account-level API Gateway logging
   role and setting, the WAF log resource policy (D-A5) and the gateway CMK
-  (D-A4), each by the BI owner that OQ-9 chooses.
+  (D-A4), written by the governance stack as for USI, after an exact-ARN
+  admission in the seed (D-A9); no ConfigRead roles (D-A10).
 - This repository: hygiene, repository controls, the governed pipeline,
   the certificate (PR #34 amended), the TEST and PROD front door, alarms,
   runbooks.
@@ -114,12 +115,19 @@ delivered as its own governed track instead of the single USI story S5.16.
 
 ## Constraints
 
-- D-3, D-6 and D-15 (decisions.md §2); D-A1…D-A8 (decisions.md §1).
+- D-3, D-6 and D-15 (decisions.md §2); D-A1…D-A10 (decisions.md §1).
 - OIDC only; no long-lived keys or personal access tokens in CI.
 - Saved-plan apply; TEST before PROD; `@Kravalg` as the sole approver of
   protected environments.
 - No seed guard deny on Resource `*` is narrowed without a user decision
-  (the USI AD-26 rule, reused).
+  (the USI AD-26 rule, reused). **Recorded exception, D-A9:** the two
+  `NotResource` deny lists of `G-GitHubGovernanceApply` (TEST `8c068aaa…`
+  and `5366ec11…` at the origin/main baseline) gain exact gateway ARNs, and
+  the governance ceilings and five operator guards gain exact gateway
+  entries. Two of those operator guard statements (`c18540fb…` TEST,
+  `0142330f…` PROD) are Resource-`*` denies with an `ArnNotEquals`
+  condition; they are part of this exception. `dc27f076…` (role
+  creation and deletion) is not narrowed.
 - No IAM resource is declared in this repository's program.
 
 ## Assumptions

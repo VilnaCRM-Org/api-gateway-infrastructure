@@ -11,7 +11,7 @@ This file is the execution ledger. It is not a planning input.
 | Worktree | wt-agi-plan |
 | Branch | feat/gateway-wa-plan |
 | Source baseline | f056c8b32c64e502101ec573191d8f229881bc7a (origin/main) |
-| Bundle revision | 2 (user decisions D-A1…D-A8 of 2026-10-01; revision 1 is commit `3d511f1`) |
+| Bundle revision | 3 (user decisions D-A9, D-A10 of 2026-10-01; revision 1 is `3d511f1`, revision 2 is `d5007b3`) |
 | Specs directory | `specs/gateway-wa-plan/` |
 | Target | pulumi (Python Pulumi), stacks test and prod |
 | Environment | none selected; planning is offline |
@@ -104,19 +104,19 @@ This file is the execution ledger. It is not a planning input.
   the governance runbook needs only a catalog entry; GR-12 shows the seed
   guards block it).
 
-## Artifacts (sha256, revision 2)
+## Artifacts (sha256, revision 3)
 
 `run-summary.md` is not hashed here, because it contains the hashes. Check
 with `sha256sum -c` over the block below, from `specs/gateway-wa-plan/`.
 
 ```
-14846a596346622c53e40a2372ad256bd909f283f197b19b205df5d9eef9403e  research.md
-8810238e1348dc8ab0a8cb3e4f76bc190a828202708f5d35b15f87a2dfd2f939  brief.md
-039f7a292d973c5a58b4aa1d7d4a49d600e09472e8b73a70a7e9b276df445b96  prd.md
-5f56fc5e68292e541018b742a37b9c9608e9d7314081a3676c53dbfbc32be189  architecture.md
-fe22fd3180a7f5840ecbd10b0ab4ec5bca48c1d47f33ccc2e170d5591e3ad58f  epics-stories.md
-ad392338c3377c28a7de2591296e0aebc73fd698b55af6e980bb2e9a3d044d7f  decisions.md
-cbec463c33e10e16d43b85805ef3f20825c66faa190335fc697a346c44778b57  readiness.md
+9ec0906fe5c7a8b02258f1ac1ca548278d4a67526e42ec84d3132b9377d2fc42  research.md
+f51bd5aebabe0ef98fb0fa5083bea784b088dac526e335bac2490ae627dda65a  brief.md
+17727b82f8ae7429dd00e815c1458133f98bf8f6dfba31d4ba16084792c57f5c  prd.md
+11a671ba6474ea5a3699dd22d948d971e59cc2d7d5ec090b02cb64afd64c0b1e  architecture.md
+6d050d818552b6d53b0be75a0b19a93cd0f4f5923e2f2addf3634345e56800cf  epics-stories.md
+42c7ecfc5f03d290e9294bf380cc96939ad3ecc4685fe6bde30e245a537c76e8  decisions.md
+67119cf6b0132b676aafa4f2c915bac4ca9c28703fd01408a83c259518d6c7a6  readiness.md
 ```
 
 ## Gates
@@ -127,12 +127,16 @@ cbec463c33e10e16d43b85805ef3f20825c66faa190335fc697a346c44778b57  readiness.md
 | Revision 1 pre-commit audit and recheck | REFUTED, then REFUTED narrowly; all findings folded into `3d511f1` (readiness.md, "Revision 1 audit history") |
 | Revision 2 pre-commit audit (`claude-router:audit`) | REFUTED narrowly: 2 major, 2 minor, 4 nits; all folded in |
 | Revision 2 recheck | REFUTED narrowly: 7 of 8 fixed, #2 partly; new N1 (minor), N2-N3 (nits); all folded in; no third round |
+| Revision 3 pre-commit audit (`claude-router:audit`) | REFUTED: 1 major (governance Apply ceiling cannot hold the exact-ARN admission → OQ-11, V-A12), 3 medium, 1 minor; all folded in |
+| Revision 3 recheck | REFUTED narrowly: 4 of 5 fixed, #4 partly; new N1 (minor), N2 (nit); all folded in; no third round |
 | Independent readiness round | not run yet |
 
 ## Report summary
 
-- **Decisions recorded:** D-A1…D-A8 (2026-10-01), gateway-local namespace.
-  They answer OQ-1…OQ-8.
+- **Decisions recorded:** D-A1…D-A10 (2026-10-01), gateway-local namespace.
+  They answer OQ-1…OQ-10. Revision 3 adds D-A9 (governance owns the
+  gateway's grants, backend, CMK and account settings after an exact-ARN
+  seed admission) and D-A10 (no ConfigRead roles).
 - **Epics:**
   - E-G0 dispositions (G0.1, G0.2);
   - E-G1 BI enrolment by the seed registration route (G1.1 packet, G1.2
@@ -149,6 +153,8 @@ cbec463c33e10e16d43b85805ef3f20825c66faa190335fc697a346c44778b57  readiness.md
 - **External preconditions:** XP-A1…XP-A14 (gateway-local namespace).
   XP-A1 is now the human seed operator; XP-A11 is resolved to "the zone
   exists, or is created, in the PROD account".
-- **Open user questions:** OQ-9 (the writer of the gateway's grants and
-  non-role BI resources) and OQ-10 (ConfigRead roles). Cross-plan request
-  to USI: CR-A1.
+- **Open user questions:** OQ-11 (raised by the revision-3 audit: the
+  D-A9 exact-ARN admission does not fit the 6144-character governance
+  Apply ceiling; blocks G1.1). Cross-plan request to USI: CR-A1.
+- **Counts per environment:** 29 principals, 8 seed-created, 64 seed
+  policies (under OQ-11 (b) or (c); under (a): 30 / 9 / 66).

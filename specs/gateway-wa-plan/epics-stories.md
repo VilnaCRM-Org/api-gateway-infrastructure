@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-create-epics-and-stories (Creat
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 2 (2026-10-01: user decisions D-A1…D-A8; E-G1 rewritten for the seed registration route; OQ-8 (a)-only stories removed; rows renumbered)
+revision: 3 (2026-10-01: D-A9 governance owns grants and non-role BI resources; D-A10 no ConfigRead roles; E-G1 updated)
 inputDocuments: [prd.md, architecture.md, decisions.md]
 ---
 
@@ -13,9 +13,9 @@ inputDocuments: [prd.md, architecture.md, decisions.md]
 ## Requirements inventory
 
 - 25 FRs (FR-A01…FR-A25) and 11 NFRs (NFR-A01…NFR-A11): `prd.md` §3-§4.
-- Gateway decisions D-A1…D-A8 (2026-10-01; they answer OQ-1…OQ-8); reused
-  user decisions D-3, D-6, D-15 (and the D-4 consequence); open questions
-  OQ-9 and OQ-10; cross-plan change request CR-A1; planning defaults
+- Gateway decisions D-A1…D-A10 (2026-10-01; they answer OQ-1…OQ-10;
+  OQ-11 is open, raised by the revision-3 audit); reused user decisions D-3, D-6, D-15 (and the D-4
+  consequence); cross-plan change request CR-A1; planning defaults
   PD-1…PD-14: `decisions.md`.
 - External preconditions XP-A1…XP-A14 (gateway-local namespace, PD-1):
   `prd.md` §7.
@@ -125,14 +125,18 @@ Rules for every BI story:
   (XP-A4), inside a freeze window from install to catalog pin.
 - TEST, then PROD, inside the story unless stated otherwise.
 - Every seed change set is installed by the human seed operator (XP-A1).
+- Every governance change is a reviewed governance PR, applied TEST then
+  PROD under the `governance` environment with `@Kravalg`'s approval.
 
-D-A1 fixes the route for the roles. Where a story's owner depends on OQ-9,
-the story lists the work under each option, and the user's answer selects
-one.
+D-A1 fixes the route for the roles: the seed creates and registers them.
+D-A9 fixes the writer of their grants and of the non-role BI resources:
+governance, as for USI, after the seed admits it by exact ARNs. D-A10: no
+ConfigRead roles.
 
 ### G1.1 (BI): Gateway seed enrolment packet (source only)
 
-- **Needs:** D-A1; OQ-9 and OQ-10 answered; V-A10 (the BI owner's review).
+- **Needs:** D-A1, D-A9, D-A10; OQ-11 answered; V-A10 (the BI owner's
+  review); V-A12 (every ceiling ≤ 6144).
 - **Files:**
   - `pulumi/seed/gateway_enrollment_amendment.py` and its manifest (new,
     modelled on `test_poc_prerequisite_amendment.py` and
@@ -149,15 +153,23 @@ one.
 - **Work:** AD-A1's source packet. The packet renders, per environment, the
   candidate result catalog and the candidate seed template. Their contents:
   - the five gateway principals (Preview, Apply, Drift, replication,
-    logging) and, under OQ-10 (b) or (c), the ConfigRead readers;
-  - their three boundaries and their guards;
-  - the identity policies the OQ-9 option puts in the seed: the logging
-    role's always, plus the CI and replication roles' under (a) or (c);
-  - under OQ-9 (b), the governance guard and ceiling amendments that
-    OQ-9 (b) lists.
+    logging); no ConfigRead reader (D-A10);
+  - their three boundaries, five guards and the logging role's identity
+    policy (29 principals and 64 policies per environment, under OQ-11 (b) or (c); under (a): 30 / 9 / 66);
+  - the D-A9 governance admission (architecture AD-A1): exact gateway
+    ARNs in the two `NotResource` lists of `G-GitHubGovernanceApply`
+    (ids per baseline), in `ceiling/GitHubGovernanceApply`,
+    `C-GitHubGovernancePreview` and `C-GitHubGovernanceDrift`, in the
+    catalog's `operator_bindings`, and in the five operator executor
+    guards;
+  - the fixed set of governance-owned gateway documents that later grant
+    stories may change: the Apply role's managed policy ARNs and the
+    inline policy names on the Preview, Drift and replication roles, with
+    the registry's inline-policy allowance for exactly those names.
 
   The packet pins the baseline catalog hash in force at its slot, the
-  installed template digest, the result hash and the Add rows. As in #284,
+  installed template digest, the result hash, the Add rows and the
+  admission Modify rows. As in #284,
   this PR changes **neither** the active catalogs, nor `CATALOG_HASHES`,
   nor the active counts. Those change together in G1.2's pin PR.
 - **Acceptance:**
@@ -171,13 +183,14 @@ one.
     The rendered template adds exactly the expected logical ids.
   - N: a test that compares every pre-existing statement, policy,
     principal, attachment and binding with the baseline finds no change
-    (the OQ-9 (b) governance guard and ceiling amendments are the only
-    exception, and only if chosen). The mixed-phase verifier refuses an
+    (the D-A9 admission entries are the only exception, and each adds only
+    an exact gateway ARN or resource). `verify_active_enrollment` refuses
+    an inline policy name outside the fixed set on Preview, Drift or
+    replication, and any inline policy on the Apply or logging role (P:
+    exactly the fixed inline names pass). The mixed-phase verifier refuses an
     active gateway trust, a disabled executor trust, and any changed
     pre-existing attachment. The CREATE validator refuses a change set with any Modify,
-    Remove, replacement, dynamic or extra Add row, except, under OQ-9 (b),
-    the exact listed governance guard, governance ceiling and operator
-    guard Modify rows. The activation validator
+    Remove, replacement, dynamic or extra Add row, except the exact D-A9 admission Modify rows (governance guard, governance ceilings, five operator guards; the operator bindings are catalog metadata, not rows). The activation validator
     refuses any row other than the gateway trust Modify rows, and any
     trust with a `pull_request` or `ref` subject, another repository id or
     a wildcard. Replaying the module against its result fails.
@@ -186,22 +199,23 @@ one.
     is ≤ 64 characters, and every new policy basename is unique across the
     catalog regardless of path and case.
 - **STOP:** V-A10 declined (escalate to the user; no fallback to an
-  independent stack); a result that would change `dc27f076…` or any other
-  Resource-`*` deny.
+  independent stack); a result that would change `dc27f076…` or any
+  Resource-`*` deny other than the D-A9 operator guards `c18540fb…` /
+  `0142330f…`; an admission entry that is not an exact ARN or exact
+  resource (for example a prefix or wildcard); **any governance ceiling
+  that renders above 6144 characters (V-A12). Today the Apply ceiling
+  does, so G1.1 is stopped until the user answers OQ-11.**
 
 ### G1.2 (BI; human seed operator, live): Install, activate and pin (TEST, then PROD)
 
-- **Needs:** G1.1 merged; OQ-10 (the role set, through G1.1); XP-A1;
-  XP-A2; an XP-A4 slot per environment.
+- **Needs:** G1.1 merged; XP-A1; XP-A2; an XP-A4 slot per environment.
 - **Work:** AD-A1 "Installation and activation", per environment:
   - absent-name checks, and the observed lifecycle phase (active or
     disabled) of each `GitHubOperator*` executor, recorded for the
     mixed-phase verifier;
   - the CREATE change set (exact Add rows enforced by the change-set
-    validator, `TemplateURL` bound to its digest; under OQ-9 (b) also the
-    exact governance guard, governance ceiling and operator executor guard
-    Modify rows, under a temporary
-    `Update:Modify` stack policy on those ids), the deny-update policy
+    validator, `TemplateURL` bound to its digest, plus the exact D-A9 admission Modify rows (governance guard, governance ceilings, five operator guards) under a
+    temporary `Update:Modify` stack policy on those ids), the deny-update policy
     restored, a readback, and the mixed-phase verifier;
   - the activation change set (the gateway trust Modify rows only, under a
     temporary `Update:Modify` stack policy on those role ids), a readback
@@ -235,24 +249,19 @@ one.
 
 ### G1.3 (BI): Gateway backend (TEST, then PROD)
 
-- **Needs:** G1.2; OQ-9.
-- **Work:** the FR-A03 bucket, replica (PD-12) and key, whose bucket and
-  key policies grant only the gateway CI roles and the replication role.
-  By the OQ-9 option:
-  - **(a)** A seed amendment that adds these resources (Add rows only;
-    XP-A1 widened).
-  - **(b)** The G1.2 change set has already amended the governance guard,
-    the governance ceilings and the catalog's operator bindings (OQ-9
-    (b)). A reviewed BI operator PR then adds the governance roles'
-    gateway storage and IAM identity policies. Then a governance catalog
-    PR adds the gateway
-    to `pulumi/repositories.governance.json`, in an external-identity mode
-    that `get()`s the G1.2 roles and creates none (a reviewed BI code
-    change). It is applied TEST, then PROD, under the `governance`
-    environment, and the same PR writes the basic `pulumi-backend` and
-    `secret-read-deny` or `read-only` documents (AD-A7, first row).
-  - **(c)** An independent BI CloudFormation backend stack (the XP-A1 (c)
-    installer).
+- **Needs:** G1.2 (roles and the D-A9 admission installed); D-A9.
+- **Work (governance, D-A9):** the FR-A03 bucket, replica (PD-12) and key,
+  whose bucket and key policies grant only the gateway CI roles and the
+  replication role.
+  1. A reviewed BI operator PR adds the governance roles' gateway storage
+     and IAM identity policies (the ARNs G1.2 admitted).
+  2. A reviewed BI code change adds governance's external-identity mode:
+     it reads the seed-created roles and creates none.
+  3. A governance catalog PR adds the gateway to
+     `pulumi/repositories.governance.json` in that mode, creates the
+     backend, and writes the basic `pulumi-backend` and `secret-read-deny`
+     or `read-only` documents (AD-A7, first row), applied TEST then PROD
+     under the `governance` environment.
 - **Acceptance:**
   - P: the BI verifier reads back the bucket (versioning, SSE-KMS with the
     key, public access blocked, TLS-only policy, replication) and the key
@@ -261,19 +270,18 @@ one.
   - N: the bucket policy denies a principal outside the gateway roles and
     BI administration (simulator).
   - E: the replica matches the USI backend pattern.
-- **STOP:** the chosen route would need a narrowed Resource-`*` deny
-  (escalate to the user).
+- **STOP:** a governance plan that touches an ARN outside the G1.2
+  admission (then a new admission in its own seed slot), or that creates
+  or deletes any role.
 
 ### G1.4a (BI): TEST certificate and read grants
 
-- **Needs:** G1.2, G1.3; OQ-9; V-A7, V-A8 resolved offline.
+- **Needs:** G1.2, G1.3; V-A7, V-A8 resolved offline.
 - **Work:** the AD-A7 rows marked **cert**, for `{zone}` =
   `Z04999481RZ4UQK2NANVH` and `{fqdn}` = `user.vilnacrmtest.com`, written
-  by the OQ-9 owner:
-  - under (a) or (c), a seed amendment of in-place identity-policy updates
-    (the #284 mechanism, with the result hash pinned after readback);
-  - under (b), a governance capability PR, after a seed amendment admits
-    any new exact policy ARN.
+  by a governance capability PR (D-A9) that changes only documents in the
+  admitted policy set. A new policy ARN would first need its own seed
+  admission.
 
   The V-A7 per-action result and V-A8's Resource-`*` list are committed
   with their Service Authorization Reference source.
@@ -293,8 +301,9 @@ one.
 
 ### G1.5 (BI): Gateway account prerequisites (TEST, then PROD)
 
-- **Needs:** G1.2 (the logging role); XP-A5; XP-A12; OQ-9.
-- **Work:** AD-A9 by the OQ-9 owner: the `AWS::ApiGateway::Account`
+- **Needs:** G1.2 (the logging role and the admission); G1.3 (governance
+  mode); XP-A5; XP-A12.
+- **Work:** AD-A9 by governance (D-A9): the `AWS::ApiGateway::Account`
   setting with the G1.2 logging role, and the D-A5 WAF-log resource
   policy. If XP-A5 shows the API Gateway service-linked role missing, the
   human seed operator or the XP-A1 installer creates it, outside CI,
@@ -311,8 +320,8 @@ one.
 
 ### G1.6 (BI): Gateway CMK (TEST, then PROD)
 
-- **Needs:** D-A4; G1.2; OQ-9.
-- **Work:** AD-A14, by the OQ-9 owner.
+- **Needs:** D-A4; G1.2; G1.3 (governance mode).
+- **Work:** AD-A14, by governance (D-A9).
 - **Acceptance:**
   - P: the key policy statements equal AD-A14 (template test).
   - N: the encryption-context condition refuses another log group
@@ -321,9 +330,9 @@ one.
 
 ### G1.4b (BI): TEST front-door grants
 
-- **Needs:** G1.4a, G1.5, G1.6; OQ-9; V-A3, V-A11 resolved offline.
-- **Work:** every other AD-A7 row for TEST, by the OQ-9 owner's grant
-  change: API Gateway (including `apigateway:SetWebACL`), WAF (including
+- **Needs:** G1.4a, G1.5, G1.6; V-A3, V-A11 resolved offline.
+- **Work:** every other AD-A7 row for TEST, by a governance capability PR
+  inside the admitted policy set: API Gateway (including `apigateway:SetWebACL`), WAF (including
   `DeleteLoggingConfiguration`), logs (including the Drift evidence
   reads), CloudWatch (including the Drift `PutMetricData` and the Apply
   `SetAlarmState`), SNS, KMS, and the ELB and EC2 describes. It also
@@ -346,17 +355,17 @@ one.
 ### G1.7 (BI): PROD certificate and read grants
 
 - **Needs:** D-A3 and XP-A11 (the `user.vilnacrm.com` zone id in account
-  `933245420672`); G1.4a (its pattern); OQ-9. TEST acceptance is **not**
+  `933245420672`); G1.4a (its pattern). TEST acceptance is **not**
   needed: the PROD certificate must precede USI row 49.
 - **Work:** the PROD **cert** rows for `user.vilnacrm.com` and the XP-A11
-  zone, by the OQ-9 owner. A PROD boundary amendment (a seed slot) is
+  zone, by a governance capability PR. A PROD boundary amendment (a seed slot) is
   needed only if G1.1's PROD ceiling does not already cover that zone.
 - **Acceptance:** the G1.4a matrix in PROD, with `user.vilnacrm.com`.
 
 ### G1.8 (BI): PROD front-door grants
 
-- **Needs:** G5.6 (TEST acceptance), G1.7; OQ-9.
-- **Work:** the remaining AD-A7 rows for PROD, by the OQ-9 owner, with the
+- **Needs:** G5.6 (TEST acceptance), G1.7.
+- **Work:** the remaining AD-A7 rows for PROD, by governance, with the
   action set observed in TEST (V-A3) and nothing wider.
 - **Acceptance:** the G1.4b matrix, in PROD.
 
@@ -449,9 +458,8 @@ one.
 
 ### G3.4 (AGI): ChatOps with saved plans
 
-- **Needs:** G3.3, G1.2, G1.3, XP-A3 (row 12); OQ-10 (whether the deploy
-  workflow reads its role ARNs and backend from protected-environment
-  variables or from a ConfigRead secret).
+- **Needs:** G3.3, G1.2, G1.3, XP-A3 (row 12). The deploy workflow reads
+  its role ARNs and backend from protected-environment variables (D-A10).
 - **Files:** `.github/workflows/pulumi-pr-commands.yml`, `deploy.yml`,
   `initialize-stack.yml`, `scripts/pulumi_pr_comment.py`,
   `pulumi_command_preflight.py`, `run_pulumi_command.py`,
@@ -622,7 +630,7 @@ one.
 
 | # | Story | Repo | Kind |
 | --- | --- | --- | --- |
-| 0 | D-A1…D-A8 recorded (2026-10-01); D-3, D-6, D-15 (and the D-4 consequence) reused from the USI bundle; OQ-9, OQ-10 open; CR-A1 sent to the USI owner; PD-1…PD-14 recorded | user | done (decisions.md); each OQ blocks only the rows that list it in "Needs" |
+| 0 | D-A1…D-A10 recorded (2026-10-01); D-3, D-6, D-15 (and the D-4 consequence) reused from the USI bundle; OQ-11 open (blocks row 8); CR-A1 sent to the USI owner; PD-1…PD-14 recorded | user | done (decisions.md) |
 | 1 | G0.1 legacy stack inventory (XP-A9; D-A6) | AGI owner | read-only |
 | 2 | G2.1 hygiene | AGI | C-controls head, C-pipeline head |
 | 3 | G3.1 toolchain and stack skeleton | AGI | C-pipeline, C-program head |
@@ -630,17 +638,17 @@ one.
 | 5 | G0.2 close #26, #32, #33 | AGI maintainer | live GitHub action |
 | 6 | G3.3 guardrails, policy pack, contract schema | AGI | C-pipeline, C-policy, C-contract head |
 | 7 | G2.2 repository-controls definition | AGI | C-controls |
-| 8 | G1.1 gateway seed enrolment packet, source only (D-A1, OQ-9, OQ-10, V-A10) | BI | C-BI-A head |
-| 9 | G1.2 seed install, trust activation and catalog pin, TEST then PROD (XP-A1) | BI (human seed operator) | C-BI-A; seed slot per environment |
-| 10 | G1.3 backend, TEST then PROD (OQ-9) | BI | C-BI-A; seed slot or governance apply |
-| 11 | G1.4a TEST certificate and read grants (OQ-9) | BI | C-BI-A; seed slot |
+| 8 | G1.1 gateway seed enrolment and governance-admission packet, source only (D-A1, D-A9, D-A10, OQ-11, V-A10, V-A12) | BI | C-BI-A head |
+| 9 | G1.2 seed install with the D-A9 admission, trust activation and catalog pin, TEST then PROD (XP-A1) | BI (human seed operator) | C-BI-A; seed slot per environment |
+| 10 | G1.3 governance mode, operator policies and backend, TEST then PROD (D-A9) | BI | C-BI-A; governance apply |
+| 11 | G1.4a TEST certificate and read grants (governance) | BI | C-BI-A; governance apply |
 | 12 | XP-A3 admin applies the G2.2 controls; readback attached | admin (`@Kravalg`) | external |
-| 13 | G3.4 ChatOps with saved plans; `initialize-stack` TEST and PROD; gate A-0 (OQ-10) | AGI | C-pipeline |
+| 13 | G3.4 ChatOps with saved plans; `initialize-stack` TEST and PROD; gate A-0 | AGI | C-pipeline |
 | 14 | G3.5 scheduled drift and probe | AGI | C-pipeline |
 | 15 | G4.1 TEST certificate (PR #34 amended); ARN to USI (XP-A8) **before USI row 42** | AGI | C-program |
-| 16 | G1.5 account prerequisites, TEST then PROD (XP-A5, XP-A12, D-A5, OQ-9) | BI | C-BI-A; seed slot |
-| 17 | G1.6 gateway CMK, TEST then PROD (D-A4, OQ-9) | BI | C-BI-A; seed slot |
-| 18 | G1.4b TEST front-door grants (OQ-9) | BI | C-BI-A; seed slot |
+| 16 | G1.5 account prerequisites, TEST then PROD (XP-A5, XP-A12, D-A5; governance) | BI | C-BI-A; governance apply |
+| 17 | G1.6 gateway CMK, TEST then PROD (D-A4; governance) | BI | C-BI-A; governance apply |
+| 18 | G1.4b TEST front-door grants (governance) | BI | C-BI-A; governance apply |
 | 19 | XP-A7 TEST descriptor from the USI owner (D-A8), **after USI S4.6 step 20 (D-A2; CR-A1)** | USI | external |
 | 20 | G5.1 TEST backend contract pin | AGI | C-contract, C-program |
 | 21 | G5.2 log groups, topic, alarms, runbooks (XP-A10) | AGI | C-program |
@@ -648,10 +656,10 @@ one.
 | 23 | G5.4 WAF | AGI | C-program |
 | 24 | G5.5 custom domain and DNS | AGI | C-program |
 | 25 | G5.6 TEST acceptance, gate A-T; evidence of steps 1-10 **before USI S4.6 step 17** (CR-A1) | AGI (+USI live) | live TEST |
-| 26 | G1.7 PROD certificate and read grants (D-A3, XP-A11, OQ-9) | BI | C-BI-A; seed slot |
+| 26 | G1.7 PROD certificate and read grants (D-A3, XP-A11; governance) | BI | C-BI-A; governance apply |
 | 27 | G4.2 PROD certificate for `user.vilnacrm.com`; ARN to USI **before USI row 49** | AGI | C-program |
 | 28 | XP-A7 PROD descriptor from the USI owner, **after USI row 52** | USI | external |
-| 29 | G1.8 PROD front-door grants (OQ-9) | BI | C-BI-A tail; seed slot |
+| 29 | G1.8 PROD front-door grants (governance) | BI | C-BI-A tail; governance apply |
 | 30 | G6.1 PROD backend contract pin | AGI | C-contract tail |
 | 31 | G6.2 PROD front door, gate A-P (D-A7) | AGI | C-program tail |
 | 32 | G6.3 PROD acceptance, drift and probe | AGI | live PROD |
@@ -661,12 +669,13 @@ OQ-8 (a)) are removed by D-A2. Its rows 29-35 are now rows 26-32.
 
 **No forward dependencies (checked over all 33 rows, 0-32).** Every
 story's "Needs" names only lower-numbered rows, user decisions (D-A…),
-open questions, external preconditions (XP-A…) or verification items.
+open questions (OQ-11), external preconditions (XP-A…) or verification
+items.
 
 - G0.2 (5) needs 3 and 4.
 - G3.3 (6) needs 4.
 - G2.2 (7) needs 4 and 6.
-- G1.1 (8) needs D-A1, OQ-9, OQ-10 and V-A10.
+- G1.1 (8) needs D-A1, D-A9, D-A10, OQ-11, V-A10 and V-A12.
 - G1.2 (9) needs 8.
 - G1.3 (10) needs 9.
 - G1.4a (11) needs 9 and 10.
@@ -674,7 +683,7 @@ open questions, external preconditions (XP-A…) or verification items.
 - G3.4 (13) needs 6, 9, 10 and 12.
 - G3.5 (14) needs 13.
 - G4.1 (15) needs 1, 11 and 13.
-- G1.5 (16) and G1.6 (17) need 9.
+- G1.5 (16) and G1.6 (17) need 9 and 10.
 - G1.4b (18) needs 11, 16 and 17.
 - G5.1 (20) needs 15, 18 and 19.
 - G5.2 (21) needs 20 and 17.
