@@ -4,7 +4,7 @@ workflow: _bmad/core/tasks/bmad-create-prd (non-interactive; steps resolved from
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 8 (2026-10-01: readiness round 4 resolved)
+revision: 9 (2026-10-01: readiness round 5 resolved)
 inputDocuments: [research.md, brief.md, decisions.md, USI specs/workload-wa-hardening (9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -56,17 +56,18 @@ A test in G3.2 recomputes these counts from the tables below.
   - the human seed operator's one-time WAF-log resource-policy write
     (D-A12 branch A only);
   - under D-A12 branch B, if WAF log delivery rejects the scoped form
-    (G5.4 STOP, PD-16), three contingency actions, each with its TEST half
-    before the row-23 retry and its PROD half before row 31c:
-    - **23-F3**, a reviewed governance PR (`/pulumi test plan|up`, then
-      PROD) that sets `gateway_waf_log_policy: false` and deletes the
-      21a/31b policy through CI under the exact-ARN
-      `logs:DeleteResourcePolicy` (PD-15);
+    (G5.4 STOP, PD-16), three contingency actions. The row-23 retry
+    waits for the TEST halves of 23-F3 and 23-F2; the TEST half of 23-F1
+    follows the retry; every PROD half runs before row 31c:
+    - **23-F3**, a reviewed governance PR (`/pulumi test plan|up`; the
+      PROD half only in the PROD-only fallback) that sets
+      `gateway_waf_log_policy: false` and deletes the 21a (or 31b) policy
+      through CI under the exact-ARN `logs:DeleteResourcePolicy` (PD-15);
+    - **23-F2**, the human seed operator's account-scoped WAF-log policy
+      write (the branch-A position);
     - **23-F1**, a seed amendment that drops the three branch-B `logs:`
       actions, installed by the human seed operator (XP-A1) in the XP-A4
       queue and followed by a `CATALOG_HASHES` re-pin PR;
-    - **23-F2**, the human seed operator's account-scoped WAF-log policy
-      write (the branch-A position);
   - the live `pulumi stack init` of the two gateway governance stacks,
     run by the XP-A1 human operator under the committed session policy
     `pulumi/governance/stack-init-session-policy-{env}.json`, which
@@ -80,6 +81,34 @@ A test in G3.2 recomputes these counts from the tables below.
   - closing PRs #26, #32 and #33 and pushing to PR #34;
   - any deletion (a legacy bucket under D-A6, after its emptiness check;
     a recovery).
+- **Out-of-CI actions and their authority.** The user's rule, quoted
+  verbatim from chat: "The aws with prod and test account is only for debugging and unblocking purposes, all infra should be applied through the automated GitHub pr ci checks". Every other
+  infrastructure change in this plan goes through the automated GitHub
+  PR CI checks. The exceptions:
+  - the G1.2 seed installs and trust activations, and every later seed
+    amendment install, by the human seed operator (XP-A1; D-A1);
+  - the API Gateway service-linked role, if XP-A5 finds it missing, by
+    the seed operator, as D-A12 cites for service-linked roles (the
+    governance guard denies `iam:CreateServiceLinkedRole`);
+  - the D-A6 legacy-bucket deletion after its emptiness check (the
+    user's D-A6 decision);
+  - the XP-A3 GitHub settings (ruleset, environments, variables) and the
+    BI environments of G1.3, by a repository admin;
+  - the G1.3 step 2a `pulumi stack init` of the two gateway governance
+    stacks, a one-time unblocking step that CI cannot perform (BI
+    `docs/governance-stack.md` lines 240-255), under the committed
+    session policy, and its precondition: the XP-A1 operator role's
+    self-assume trust and `sts:AssumeRole` identity change (XP-A1);
+  - a reviewed recovery outside routine apply, for example a PROD VPC
+    link replacement (architecture AD-A3 "Replacement windows"; PD-6),
+    each with its own per-action authorization from the user;
+  - under D-A12 branch A, the seed operator's account-scoped WAF-log
+    policy write (D-A12);
+  - in the branch-B contingency, the 23-F2 write (D-A12) and the 23-F1
+    seed amendment install (D-A1), by the seed operator.
+
+  Out of scope: the PROD hosted zone, if it must be created (XP-A11), is
+  created by its external owner, not by this plan.
 - **Failure states.** Every story lists STOP conditions. A STOP halts the
   story, records evidence and escalates to the named owner. No story
   retries a STOP with wider permissions, a removed check or a label
@@ -246,8 +275,11 @@ keep their USI names.
   G1.2's and before row 16 (after a branch-B fallback, the same write is
   23-F2, after row 23). It changes no catalog, so nothing rebases. Under
   branch B, the contingency 23-F1 is a catalog change in this queue: it
-  rebases every later USI seed module, and its TEST half lands after the S4.6 step-20 seed amendments of USI row 43 (S5.5/S5.18b) are installed and pinned and before USI row 45 (the queue stays one-open),
-  and is followed by a `CATALOG_HASHES` re-pin PR (CR-A2, PD-16).
+  rebases every later USI seed module in the same environment, its TEST
+  half takes the first free slot after the row-23 retry (inside USI row
+  43's open campaign if the slot falls there; CR-A2 asks whether USI's
+  step-21 receipt binds a TEST catalog hash), and it is followed by a
+  `CATALOG_HASHES` re-pin PR (CR-A2, PD-16).
   The plan schedules the TEST certificate path (rows 8-11, then
   row 15) before USI row 42, because USI XP-11 needs the gateway's TEST
   certificate (K-4).

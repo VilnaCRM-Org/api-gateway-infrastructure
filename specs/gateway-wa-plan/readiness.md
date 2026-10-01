@@ -4,18 +4,20 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-check-implementation-readiness 
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 8 (independent readiness round 4 at 7e644b7: FAIL, 2 medium, 2 low, 3 nits; all resolved here)
-author: the planning agent that wrote revisions 1-8 (NOT an independent reviewer)
-independent_reviewer: readiness round 1 (FAIL) on revision 4; round 2 (FAIL, no major) on revision 5; round 3 (FAIL, 1 medium) on revision 6; round 4 (FAIL, 2 medium) on revision 7; round 5 not run yet
-status: PENDING independent readiness round 5 on revision 8
+revision: 9 (independent readiness round 5 at 2c949ab: PASS, 5 low, 2 nits; all folded in here)
+author: the planning agent that wrote revisions 1-9 (NOT an independent reviewer)
+independent_reviewer: readiness round 1 (FAIL) on revision 4; round 2 (FAIL, no major) on revision 5; round 3 (FAIL, 1 medium) on revision 6; round 4 (FAIL, 2 medium) on revision 7; round 5 (PASS, 5 low, 2 nits) on revision 8
+status: PASS (independent readiness round 5 on revision 8); revision 9 folds in its lows and nits, checked by a targeted fresh-context recheck
 ---
 
 # Implementation readiness
 
 ## Verdict
 
-**Not PASS; pending an independent review.** The author of this file wrote
-the bundle, so this is a self-check, not a gate result. A fresh-context
+**Independent readiness round 5 PASSED on revision 8** (`2c949ab`), with
+5 low findings and 2 nits; revision 9 folds them in (table below), and a
+targeted fresh-context recheck covered those items only. The rest of this
+file is the author's self-check, not a gate result. A fresh-context
 pre-commit audit and its recheck ran on each revision before its commit
 (below). The self-check finds the bundle complete enough for an
 independent readiness round. These items block implementation:
@@ -72,13 +74,13 @@ independent readiness round. These items block implementation:
     here, not decided.
   - rows 28-32 (with 31a-31c) after USI row 52.
 
-## Checks performed (self-check, revision 8)
+## Checks performed (self-check, revision 9)
 
 | Check | Result |
 | --- | --- |
 | Every FR and NFR has at least one story (epics FR coverage map) | yes: 25 FRs, 11 NFRs; FR-A25 now maps to G5.1 and G5.6 |
 | PRD §1 counts equal the tables | 25 + 11 = 36; offline 23 FRs + 8 NFRs = 31; live-only FRs 2; evidence-only NFRs 3; offline FRs with live evidence 18 (recomputed from the Risk column; FR-A25's Risk is now C, L) |
-| Ordered list has no forward dependency | yes, 36 rows (0-32 with 21a and 31a-31c), checked by `evidence/check_ordered_list.py` for both D-A12 branches, plus model checks of both fallback cases (the per-stack key keeps the PROD policy out of rows 26 and 29; the contingency halves are placed before the row-23 retry and before 31c), including test, ownership and feature-flag levels (epics "No forward dependencies") |
+| Ordered list has no forward dependency | yes, 36 rows (0-32 with 21a and 31a-31c), checked by `evidence/check_ordered_list.py` for both D-A12 branches, plus model checks of both fallback cases (the per-stack key keeps the PROD policy out of rows 26 and 29; the TEST halves of 23-F3 and 23-F2 come before the row-23 retry, the TEST half of 23-F1 after it, and the PROD halves before 31c), including test, ownership and feature-flag levels (epics "No forward dependencies") |
 | Rows 26-28 of revision 1 removed, later rows renumbered | yes: G1.9, G5.7, G5.8 removed; rows 29-35 → 26-32; every in-bundle reference to a gateway row re-checked (USI row numbers unchanged) |
 | No OQ-8 (a) remnant | yes: no recovery role, `test-recovery` environment, teardown manifest, recovery guardrail mode or `detached` flag remains |
 | Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8 (they reuse the G1.4a and G1.4b matrices in PROD), G4.2 (as G4.1, in PROD), G5.6 (the gate A-T steps), G6.1 (the offline checks of G5.1; its live checks first run at row 31a) and G6.3 (gate A-P) |
@@ -164,6 +166,34 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | incident-response | runbooks (NFR-A10) |
 | terraform-terraspace | not applicable |
 | bmad-autonomous-planning | the planning chain itself (revisions 1-7) |
+
+## Readiness round 5 (on `2c949ab`, PASS: 5 low, 2 nits): resolution table
+
+| # | Finding (short) | Where resolved (revision 9) |
+| --- | --- | --- |
+| R5-1 | The operator-document read grant was shared across environments, so a TEST re-pin broke PROD's coverage check and PD-16's split state could not be expressed | The gateway operator documents derive the branch-B `logs:DescribeResourcePolicies` grant per environment from that environment's pinned catalog; the coverage test runs per environment, in both directions (architecture AD-A1; epics G1.3 and G5.4 23-F1; PD-16) |
+| R5-2 | `governance:protectResources: "true"` (BI `pulumi/governance/Pulumi.test.yaml` line 17) would refuse 23-F3's delete | G1.5b declares the `LogResourcePolicy` with an explicit `protect=False`, not inherited; a mock test asserts it, keeps `protect=True` on the resources that already take `protect_resources`, and allows no protect change to any existing governance resource (see the recheck, NEW-1). Justified in G1.5b and PD-15: cheap to recreate, and deleting it is the contingency |
+| R5-3 | In the PROD-only fallback, row 31c could make PROD public without WAF logging | G5.5: the base-path mapping and alias records `depends_on` the WAF association and logging configuration (shared program), with a mock test; G6.2 N states the outcome |
+| R5-4 | The row-23 retry waited for the 23-F1 seed amendment, extending the CR-A1 hold | Order is now 23-F3, 23-F2, retry, then 23-F1 (TEST half after the retry, before 31c). Chains in G5.4, the ordered-list bullet, PD-16, CR-A2, prd §2 and XP-A4, the V-A6 row, and `evidence/check_ordered_list.py` edges updated |
+| R5-5 | PD-15 paraphrased the user's rule; no complete list of out-of-CI actions | PD-15 and prd §2 quote the rule verbatim; prd §2 lists every out-of-CI action with its authority (G1.2 installs, SLR, D-A6 deletion, XP-A3 settings, G1.3 step 2a stack init, branch-A write, 23-F1 and 23-F2); the G5.4 sentence is scoped to the contingency |
+| Nit 1 | 23-F1 "re-renders to branch-A sizes" | "branch-A shape, re-measured at its slot" (the shared ceilings by then include USI S5.2 and XP-11) |
+| Nit 2 | CR-A2 freeze window of 23-F1 TEST | CR-A2 states that the window may fall inside USI row 43's open campaign and asks the USI owner whether the step-21 receipt binds a TEST catalog hash (if so, 23-F1 TEST waits until after step 21) |
+
+## Revision 9 targeted recheck (fresh context, `claude-router:audit`)
+
+**Targeted recheck of the uncommitted revision 9 (round-5 items only): REFUTED, narrowly** (1 P3, 5 P4). FIXED: R5-3, R5-4, Nit 1, Nit 2. PARTLY: R5-1 (the G1.3 test text was still one-direction), R5-2 and R5-5. It reproduced `evidence/check_ordered_list.py` (no violation in four orders), the verbatim quote in PD-15 and prd §2, and the BI wiring at `wt-boot-urllib3` 862b4bf.
+
+| # | Finding (short) | Resolution |
+| --- | --- | --- |
+| NEW-1 (P3) | The G1.5b mock test required "every other governance resource keeps `protect=True`", which BI's unprotected governance components (state buckets, secrets keys, `SecretVersion`) fail | The test asserts `protect=False` on the `LogResourcePolicy`, `protect=True` on the resources that already take `protect_resources` (CI configuration, roles), and no protect change to any existing governance resource |
+| NEW-2 (P4) | Wrong file and model for `protectResources` | G1.5b, AD-A9 and PD-15 cite `pulumi/governance/__main__.py` 30-32 and 60 and `pulumi/infra/governance.py` 635-679 and 1047; the flag is passed per resource, and the explicit `False` guards against a later parent-level protect |
+| NEW-3 (P4) | Self-check row stated the old chain | Updated to 23-F3/23-F2 TEST before the retry, 23-F1 TEST after it |
+| NEW-4 (P4) | prd §2 contingency bullets out of order; 23-F3 "then PROD" | Reordered 23-F3, 23-F2, 23-F1; 23-F3's PROD half only in the PROD-only fallback |
+| NEW-5 (P4) | The out-of-CI list missed the XP-A1 self-assume change, a reviewed recovery, and XP-A11 | Added the first two with their authority; XP-A11 recorded as out of scope (external owner); "complete" dropped |
+| NEW-6 (P4) | Stale hash block and placeholders | Filled; hashes regenerated |
+| R5-1 residual | G1.3 coverage test text | G1.3 work and acceptance now state the per-environment, two-direction test |
+
+No second recheck ran (targeted scope, as requested).
 
 ## Readiness round 4 (on `7e644b7`, FAIL: 2 medium, 2 low, 3 nits): resolution table
 

@@ -3,8 +3,9 @@
 Run from anywhere with `python3 -B evidence/check_ordered_list.py`. It parses
 the "Ordered story list" table and the dependency bullets of
 epics-stories.md and checks four orders: D-A12 branch A (rows 21a and 31b
-dropped), branch B, the branch-B fallback found in TEST (contingency halves
-before the row-23 retry and before 31c; 31b not applicable), and the
+dropped), branch B, the branch-B fallback found in TEST (23-F3 and 23-F2
+before the row-23 retry, 23-F1 after it, PROD halves before 31c; 31b not
+applicable), and the
 fallback found only in PROD (a PROD 23-F3 after 31b). The two fallback
 orders are model checks: their contingency edges are encoded below from
 the epics "Contingency rows" bullet, not parsed. Exit 1 on any violation.
@@ -37,14 +38,24 @@ def check(order,branchB,label):
     return bad
 A=[r for r in rows if r not in('21a','31b')]
 B=list(rows)
-# branch B with fallback: TEST halves after 21a,22 before 23 retry; PROD halves after 31a before 31c; 31b n/a
-F=list(rows); i=F.index('23'); F[i:i]=['23-F3T','23-F1T','23-F2T']; F.remove('31b'); j=F.index('31c'); F[j:j]=['23-F1P','23-F2P']
-needs['23-F3T']=(['21a','22'],[]); needs['23-F1T']=(['23-F3T'],[]); needs['23-F2T']=(['23-F1T'],[])
-needs['23-F1P']=(['31a','23-F2T'],[]); needs['23-F2P']=(['23-F1P'],[])
-needs_fb=dict(needs); needs_fb['23']=(needs['23'][0]+['23-F2T'],[]); needs_fb['31c']=(['31a','23-F2P'],[])
 bad=check(A,False,'branch A')+check(B,True,'branch B')
-saved=needs; needs=needs_fb; bad+=check(F,False,'branch B fallback (TEST)'); needs=saved
-P=list(rows); j=P.index('31c'); P[j:j]=['23-F3P','23-F1P','23-F2P']
-needs_p=dict(needs); needs_p['23-F3P']=(['31b'],[]); needs_p['23-F1P']=(['23-F3P'],[]); needs_p['23-F2P']=(['23-F1P'],[]); needs_p['31c']=(['31a','31b','23-F2P'],[])
-saved=needs; needs=needs_p; bad+=check(P,True,'branch B fallback (PROD only)'); needs=saved
+# Model of the branch-B fallback found in TEST (revision 9, R5-4): the TEST
+# halves of 23-F3 and 23-F2 run after 21a and 22 and before the row-23
+# retry; the TEST half of 23-F1 follows the retry; the PROD halves (23-F2,
+# 23-F1) run after 31a and before 31c; row 31b is not applicable.
+F=list(rows); F.remove('31b')
+i=F.index('23'); F[i:i]=['23-F3T','23-F2T']; F.insert(F.index('23')+1,'23-F1T')
+j=F.index('31c'); F[j:j]=['23-F2P','23-F1P']
+nf=dict(needs)
+nf['23-F3T']=(['21a','22'],[]); nf['23-F2T']=(['23-F3T'],[])
+nf['23']=(needs['23'][0]+['21a','23-F3T','23-F2T'],[])
+nf['23-F1T']=(['23'],[])
+nf['23-F2P']=(['31a','23-F2T'],[]); nf['23-F1P']=(['23-F2P','23-F1T'],[])
+nf['31c']=(['31a','23-F2P','23-F1P'],[])
+saved=needs; needs=nf; bad+=check(F,False,'branch B fallback (TEST)'); needs=saved
+# Model of the fallback found only in PROD: a PROD 23-F3 after 31b, then the
+# PROD halves of 23-F2 and 23-F1, then the 31c retry; TEST stays on branch B.
+P=list(rows); j=P.index('31c'); P[j:j]=['23-F3P','23-F2P','23-F1P']
+np_=dict(needs); np_['23-F3P']=(['31b'],[]); np_['23-F2P']=(['23-F3P'],[]); np_['23-F1P']=(['23-F2P'],[]); np_['31c']=(['31a','31b','23-F3P','23-F2P','23-F1P'],[])
+saved=needs; needs=np_; bad+=check(P,True,'branch B fallback (PROD only)'); needs=saved
 sys.exit(1 if bad else 0)

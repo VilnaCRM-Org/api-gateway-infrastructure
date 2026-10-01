@@ -361,12 +361,16 @@ ConfigRead roles.
      the gateway documents enumerate every read the shared ceilings admit
      (architecture AD-A1, "Identity grants matching the ceiling
      admissions"): `apigateway:GET /account`,
-     `logs:DescribeResourcePolicies` (D-A12 branch B only), and the KMS
+     `logs:DescribeResourcePolicies` (D-A12 branch B only; derived per
+     environment from that environment's pinned catalog, so it exists
+     exactly while that catalog admits it), and the KMS
      read for both
      `pulumi-secrets` and `gateway-logs`, beyond today's
      `governance_repo_storage_policy` (`governance_automation.py` lines
-     551-567) and metadata document (lines 714-736). A test fails if any
-     gateway admission in either shared ceiling lacks a matching grant.
+     551-567) and metadata document (lines 714-736). A per-environment
+     test fails if any gateway admission in either shared ceiling lacks a
+     matching grant in that environment's documents, or if any grant has
+     no matching admission (both directions).
      `GovernanceAutomation` today creates `{role}-{repo}-iam`/`-storage`
      for every purpose and every catalog repository (BI
      `governance_automation.py` lines 652, 739-764). For a dedicated-target
@@ -492,8 +496,9 @@ ConfigRead roles.
     policy, and replication to the replica through the seed-created
     replication role. It also reads back the key alias with the existing
     key policy. The first use of the backend is G3.4's `initialize-stack`
-    (row 13). Every gateway admission in the shared ceilings has a
-    matching operator-document grant (test).
+    (row 13). Per environment, every gateway admission in the shared
+    ceilings has a matching operator-document grant, and every grant has
+    a matching admission (test).
   - N: a non-TLS request is denied by the bucket policy. A role whose
     identity has no grant on the gateway backend (for example a USI CI
     role) is denied by IAM and its boundary (simulator), since the bucket
@@ -585,7 +590,16 @@ ConfigRead roles.
   `delivery.logs.amazonaws.com` with `aws:SourceAccount` and
   `aws:SourceArn`. It is applied under the dedicated role, whose ceiling
   and identity allow `logs:PutResourcePolicy` and `DeleteResourcePolicy`
-  on exactly that ARN.
+  on exactly that ARN. The resource is declared with an explicit
+  `protect=False` in its own resource options. BI passes the stack's
+  `governance:protectResources: "true"` (BI
+  `pulumi/governance/Pulumi.test.yaml` line 17) per resource, not by
+  inheritance: `pulumi/governance/__main__.py` lines 30-32 and 60 hand it
+  to `GovernanceStack`, and `pulumi/infra/governance.py` lines 635-679 and
+  1047 apply it to the CI configuration and roles. The explicit `False`
+  keeps the policy deletable if that flag is ever passed to it or to a
+  parent. Reason: the policy is cheap to recreate, and deleting it is the
+  D-A12 contingency (23-F3), which a protected resource would refuse.
   - Row 21a is a single-resource PR that sets the key `true` for
     `test-api-gateway-infrastructure`.
   - Row 31b does the same for `prod-api-gateway-infrastructure`.
@@ -605,7 +619,12 @@ ConfigRead roles.
       `aws:cloudwatch/logResourcePolicy:LogResourcePolicy` while the key
       is `false` (rows 26 and 29);
     - the key in any other stack, or a non-boolean value, fails config
-      loading.
+      loading;
+    - a mock test shows the `LogResourcePolicy` has `protect=False`
+      while the stack sets `governance:protectResources: "true"`, that
+      the resources which already take `protect_resources` (the CI
+      configuration and roles) keep `protect=True`, and that no existing
+      governance resource changes its protect setting.
   - E: if the log group is absent, `PutResourcePolicy` fails in the
     single-resource row-21a or row-31b PR, with no partial write. Nothing
     else is in that apply.
@@ -906,10 +925,11 @@ ConfigRead roles.
 - **STOP (D-A12 branch B, V-A6 live):** if the TEST apply shows WAF
   logging rejecting the resource-scoped policy of row 21a, STOP. Branch A
   then applies (PD-16, not a new decision). The **contingency rows** run
-  in this order. **Every infrastructure change goes through the automated GitHub PR
-  CI, except the reviewed seed-operator procedures: the 23-F1 seed
-  change-set install and the 23-F2 write, which is branch A's
-  user-decided seed-operator write (D-A12).**
+  in this order. **Within this contingency, every infrastructure change
+  goes through the automated GitHub PR CI except two seed-operator
+  actions: the 23-F1 seed change-set install (D-A1) and the 23-F2 write
+  (branch A's seed-operator write, D-A12). prd §2 lists every out-of-CI
+  action of the plan with its authority.**
   1. **23-F3 (first; TEST only, since row 31b has not run).** A reviewed
      governance PR sets `gateway_waf_log_policy: false` (removing the
      declaration). It runs through `/pulumi test plan` and `/pulumi test
@@ -920,21 +940,30 @@ ConfigRead roles.
      `aws:cloudwatch/` as critical, and `find_destructive_steps` (lines
      115-125) flags only critical types. The plan shows exactly one
      delete of `aws:cloudwatch/logResourcePolicy:LogResourcePolicy`.
-  2. **23-F1 (source packet, then install; TEST half before the retry,
-     PROD half before row 31c).** This is a seed amendment of the
+  2. **23-F2 (TEST half before the retry, PROD half before row 31c).**
+     The human seed operator writes the account-scoped policy in its own
+     XP-A4 slot, with branch A's owner and evidence. This is the
+     fallback position of branch A's write; the normal branch-A position
+     is before row 16.
+  3. **23-F1 (source packet, then install; TEST half after the row-23
+     retry and before row 31c, so the retry and the USI S4.6 step-17/21
+     hold of CR-A1 do not wait for a seed amendment; PROD half before
+     row 31c).** This is a seed amendment of the
      G1.1 + G1.2 class:
      - an amendment module with the pinned baseline and result hashes;
      - a change-set validator that accepts exactly the in-place Modify
        rows of the dedicated ceiling and identity and of both shared
        ceilings' merged `logs:DescribeResourcePolicies` statement (back
        to `2be63eb2…`);
-     - in each environment's `CATALOG_HASHES` re-pin PR (not the packet
-       PR), an operator change that removes `logs:DescribeResourcePolicies`
-       from the gateway operator documents
+     - no operator code change: the gateway operator documents
        `GitHubGovernance{Preview,Drift}-{env}-api-gateway-infrastructure-*`
-       (G1.3). Catalog and grant then change in the same commit, so the
-       two-direction coverage test passes at every commit, and no branch-B
-       read grant is left under branch A;
+       derive their `logs:DescribeResourcePolicies` grant from that
+       environment's pinned catalog (G1.3; architecture AD-A1). Each
+       environment's `CATALOG_HASHES` re-pin PR therefore removes that
+       environment's grant only, the per-environment coverage test
+       passes at every commit, and TEST and PROD can sit on different
+       branches (PD-16). The operator apply of that environment after the
+       re-pin removes the grant;
      - the PROD half has its own packet: its amendment module is written
        on the PROD catalog that is current at its slot (after USI's PROD
        seed modules, rows 47-50), not reused from the TEST half. The
@@ -943,19 +972,22 @@ ConfigRead roles.
      - tests, and a seed review.
 
      It drops all three branch-B `logs:` actions (`PutResourcePolicy`,
-     `DeleteResourcePolicy`, `DescribeResourcePolicies`) and re-renders
-     to the branch-A sizes (5830; 5387/5397). The human seed operator
+     `DeleteResourcePolicy`, `DescribeResourcePolicies`), giving the
+     branch-A shape, re-measured at its slot (the shared ceilings by then
+     include USI S5.2 and XP-11, so the revision-8 figures 5387/5397 are
+     not the expected result). The human seed operator
      installs it in its own XP-A4 slot (XP-A1). It is a catalog change
      in the shared queue: under CR-A2 every later USI seed module rebases
-     onto its result catalog, and its TEST half lands after the S4.6 step-20 seed amendments of USI row 43 (S5.5/S5.18b) are installed and pinned and before USI row 45 (the queue stays one-open). A
-     reviewed PR re-pins `CATALOG_HASHES[env]` after readback.
-  3. **23-F2 (TEST half before the retry, PROD half before row 31c).**
-     The human seed operator writes the account-scoped policy in its own
-     XP-A4 slot, with branch A's owner and evidence. This is the
-     fallback position of branch A's write; the normal branch-A position
-     is before row 16.
+     onto its result catalog. Its TEST half takes the first free XP-A4
+     slot after the row-23 retry; its packet is written on the TEST
+     catalog current at that slot. If that slot falls inside USI row
+     43's open campaign (after S4.6 step 20, before steps 17 and 21),
+     its freeze window is inside that campaign; CR-A2 asks the USI owner
+     whether USI's step-21 receipt binds a TEST catalog hash, and if it
+     does, the TEST half waits until after step 21. A reviewed PR
+     re-pins `CATALOG_HASHES[env]` after readback.
 
-  Row 23 is retried after the TEST halves of 23-F3, 23-F1 and 23-F2. Row
+  Row 23 is retried after the TEST halves of 23-F3 and 23-F2. Row
   31b then does not apply, and the PROD halves run before row 31c (G6.2
   takes the PROD account-scoped write from 23-F2).
 
@@ -963,7 +995,7 @@ ConfigRead roles.
   31c (not expected, since TEST is the evidence for V-A6), the same
   sequence runs in PROD: a PROD 23-F3 governance PR (`/pulumi prod
   plan|up`) sets the PROD key `false` and deletes the policy through CI,
-  then the PROD halves of 23-F1 and 23-F2 run, then row 31c is retried.
+  then the PROD halves of 23-F2 and 23-F1 run, then row 31c is retried.
   The D-A12 branch is then per environment: TEST stays on branch B (its
   row-21a policy, key and `logs:` grants remain), and PROD ends on
   branch A (PD-16).
@@ -972,12 +1004,19 @@ ConfigRead roles.
 
 - **Needs:** G5.4.
 - **Files:** `pulumi/app/domain.py`, tests.
+- **Work:** the base-path mapping and the alias A and AAAA records
+  declare `depends_on` the WAF web-ACL association and the WAF logging
+  configuration of G5.4. A front door is then never reachable on the
+  custom domain before its WAF association and WAF logging exist, in
+  TEST or PROD (the program is shared).
 - **Acceptance:** P: the TEST apply creates the domain with the AD-A4 TLS
   policy and `STRICT` (V-A5) on the G4.1 certificate, the empty base path
   to `live` and alias A and AAAA. N: an edge-optimized endpoint, a
   certificate from another Region, a non-empty base path, or a mapping to
-  a stage without a web ACL fails the tests. E: the V-A5 fallback is
-  accepted only with its recorded reason.
+  a stage without a web ACL fails the tests; a mock test fails if the
+  base-path mapping or either alias record lacks the `depends_on` on the
+  web-ACL association and the logging configuration. E: the V-A5
+  fallback is accepted only with its recorded reason.
 
 ### G5.6 (AGI + USI live): TEST acceptance, gate A-T
 
@@ -1042,7 +1081,10 @@ ConfigRead roles.
 - **Acceptance:** P: `/pulumi prod plan` and `up` after the same head's
   TEST up; all FR-A16…FR-A21 resources. N: `prod up` without the TEST up
   of that head is refused; the plan contains no delete or replace of any
-  `aws:cloudwatch/logGroup` (the row-31a log groups are kept). E: the
+  `aws:cloudwatch/logGroup` (the row-31a log groups are kept); in the
+  PROD-only fallback, a 31c apply whose WAF logging configuration fails
+  creates no base-path mapping and no alias record, so PROD is not
+  public without WAF logging (G5.5 `depends_on`, mock test). E: the
   D-A7 values are in the PR, with their G5.6 evidence and the user's
   confirmation.
 
@@ -1135,7 +1177,7 @@ open.
 - G6.1 (30) needs 25, 27, 28 and 29.
 - G6.2a (31a) needs 30.
 - G1.5b PROD (31b, branch B) needs 16, 29 (C-BI-A order) and 31a.
-- Contingency rows 23-F3, 23-F1 and 23-F2, in that order (branch B, V-A6 failing live): their TEST halves run after 21a and 22 and before the retry of 23; their PROD halves (23-F1, 23-F2) run after 31a and before 31c. If only PROD rejects the policy at 31c, a PROD 23-F3 runs after 31b, then the PROD halves of 23-F1 and 23-F2, then 31c is retried. No step depends on a later row.
+- Contingency rows 23-F3, 23-F2 and 23-F1, in that order (branch B, V-A6 failing live): the TEST halves of 23-F3 and 23-F2 run after 21a and 22 and before the retry of 23; the TEST half of 23-F1 runs after the retry and before 31c; their PROD halves (23-F2, 23-F1) run after 31a and before 31c. If only PROD rejects the policy at 31c, a PROD 23-F3 runs after 31b, then the PROD halves of 23-F2 and 23-F1, then 31c is retried. No step depends on a later row.
 - G6.2 (31c) needs 31a, and under branch B also 31b.
 - G6.3 (32) needs 31c.
 

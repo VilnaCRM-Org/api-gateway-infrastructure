@@ -683,10 +683,16 @@ ECS tasks.
         granted (round-3 nit 5).
 
       G1.3's operator PR owns them. It lands and is applied before G1.5
-      and G1.6. A test fails if any gateway admission in either shared
-      ceiling has no matching grant in these documents, or if any grant
-      in these documents has no matching admission (both directions;
-      this catches a branch-B read left behind after a fallback).
+      and G1.6. The branch-B `logs:DescribeResourcePolicies` grant is not
+      fixed in code: the operator program derives it per environment
+      from that environment's pinned catalog (`seed/catalogs/{env}.json`
+      through `load_catalog`, which checks `CATALOG_HASHES`), so TEST and
+      PROD can sit on different D-A12 branches (PD-16). The coverage test
+      runs per environment and fails if any gateway admission in either
+      shared ceiling has no matching grant in that environment's
+      documents, or if any grant has no matching admission (both
+      directions; this catches a branch-B read left behind after a
+      fallback).
     - **Fixed policy set.** G1.1 fixes, per environment:
       - the governance-owned gateway **managed** policies on the CI Apply
         role (`GitHubCiApply-api-gateway-infrastructure-{env}-pulumi-backend`,
@@ -978,7 +984,10 @@ ECS tasks.
       `aws-waf-logs-api-gateway-infrastructure-*`, written once by the
       human seed operator in its own XP-A4 slot. The normal position is
       before row 16; after a live branch-B fallback it is 23-F2 (TEST
-      before the row-23 retry, PROD before row 31c);
+      before the row-23 retry, PROD before row 31c). The policy resource
+      of branch B is declared with an explicit `protect=False` (BI passes
+      `governance:protectResources` per resource, `governance.py` lines
+      635-679 and 1047), so the 23-F3 governance PR can delete it;
     - **branch B:** a resource-scoped policy on the exact
       `aws-waf-logs-api-gateway-infrastructure-{env}` log-group ARN, built
       from stack config, written by governance in G1.5b (row 21a TEST,
@@ -1223,7 +1232,7 @@ ECS tasks.
 | V-A3 | The exact caller permissions of `CreateVpcLink` (V2) | simulator matrix in G1.4b + the first TEST apply; CloudTrail read-back by the BI owner | G1.4b, G5.3 | add only the denied action, by a governance grant change inside the admitted policy set |
 | V-A4 | API Gateway verifies the ALB certificate against the `uri` host | TEST (gate A-T step 2) | G5.6 | — (a failure is a STOP) |
 | V-A5 | `SecurityPolicy_TLS13_1_2_PFS_PQ_2025_09` with `STRICT` on a Regional custom domain through `pulumi-aws` 7.23.0 | provider source (GR-17) + TEST apply | G5.5 | `TLS_1_2`, recorded |
-| V-A6 | WAF logging succeeds with the D-A12 policy and no `logs:PutResourcePolicy` on any CI role; under branch B, that WAF log delivery accepts a resource-scoped policy on the log group | docs in G1.1 (with V-A8), then the TEST apply | G1.1, G5.4 | if WAF rejects a resource-scoped policy, branch A applies (a recorded consequence of D-A12; no new decision). Found live at row 23, the G5.4 contingency rows run, all through the automated GitHub PR CI or the reviewed seed procedure, in order: 23-F3 (a governance PR sets `gateway_waf_log_policy: false`, deleting the 21a policy under the dedicated role's exact-ARN `DeleteResourcePolicy`, PD-15), 23-F1 (a seed amendment dropping all three branch-B `logs:` actions, with a CR-A2 rebase) and 23-F2 (the seed operator's account-scoped write); if WAF logging fails under branch A too, STOP and a new user decision (for example WAF logs to an S3 bucket) |
+| V-A6 | WAF logging succeeds with the D-A12 policy and no `logs:PutResourcePolicy` on any CI role; under branch B, that WAF log delivery accepts a resource-scoped policy on the log group | docs in G1.1 (with V-A8), then the TEST apply | G1.1, G5.4 | if WAF rejects a resource-scoped policy, branch A applies (a recorded consequence of D-A12; no new decision). Found live at row 23, the G5.4 contingency rows run, all through the automated GitHub PR CI or the reviewed seed procedure, in order: 23-F3 (a governance PR sets `gateway_waf_log_policy: false`, deleting the 21a policy, declared `protect=False`, under the dedicated role's exact-ARN `DeleteResourcePolicy`, PD-15), 23-F2 (the seed operator's account-scoped write), the row-23 retry, then 23-F1 (a seed amendment dropping all three branch-B `logs:` actions, with a CR-A2 rebase, before row 31c); if WAF logging fails under branch A too, STOP and a new user decision (for example WAF logs to an S3 bucket) |
 | V-A7 | Which ACM actions support `aws:ResourceTag`, `acm:DomainNames` and `acm:ValidationMethod` (GA-16) | Service Authorization Reference (ACM), per action | G1.4a | user decision (AD-A7), not defaulted |
 | V-A8 | Which actions lack resource-level support (`elasticloadbalancing:Describe*`, `ec2:Describe*` including `DescribeNetworkInterfaces`, `logs:DescribeLogGroups`, `logs:GetQueryResults`, `wafv2` list and capacity, `logs:CreateLogDelivery`, `logs:DescribeResourcePolicies`), and whether `logs:PutResourcePolicy` has a log-group-scoped form (D-A12 branch A or B) | Service Authorization Reference JSON (as the USI plan fetched it, revision 12) | **G1.1 (row 8), before any form is chosen**; G1.4a, G1.4b | none: an action with resource-level support gets exact resources |
 | V-A9 | Access logging works with the scoped CloudWatch role and a KMS log group, and API Gateway accepts the role's trust with `aws:SourceAccount` | TEST (gate A-T step 8); the trust condition by the G1.2 activation readback and the first `GetAccount` after G1.5 | G1.2, G1.5, G5.6 | by user decision, either the AWS managed policy or a trust without `aws:SourceAccount`. Because the logging role's identity and trust are seed-owned, the fallback is a seed amendment in its own XP-A4 slot (XP-A1) |
