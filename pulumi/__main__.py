@@ -10,11 +10,14 @@ an empty program.
 
 from pathlib import Path
 
-from app.config import ConfigError, load_stack
+from app.config import ConfigError, engine_config, load_stack
 
 import pulumi
 
-settings = load_stack(pulumi.get_stack(), Path(__file__).resolve().parent)
+# The engine's config view must equal the checked stack file (G31-F01).
+settings = load_stack(
+    pulumi.get_stack(), Path(__file__).resolve().parent, engine=engine_config()
+)
 
 enabled = settings.enabled_features()
 if enabled:

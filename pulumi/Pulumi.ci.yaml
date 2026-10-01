@@ -5,6 +5,8 @@
 # AWS provider is built in code (app/config.py), never set here.
 encryptionsalt: v1:Z5dK80UXwt8=:v1:5nXZ8YrI+G/5Clxu:xGIoaweHiXHeikK7sP18X3gmdPZy9w==
 config:
+  pulumi:disable-default-providers:
+    - "*"
   aws:region: eu-central-1
   api-gateway-infrastructure:awsAccountId: "123456789012"
   api-gateway-infrastructure:stub_live_invokes: true

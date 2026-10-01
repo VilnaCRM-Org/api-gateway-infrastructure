@@ -7,6 +7,7 @@ config only.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -61,5 +62,20 @@ def ci_document(documents: dict[str, dict]) -> dict:
             key("awsAccountId"): fixture_account(documents),
             key("stub_live_invokes"): True,
             key("features"): {"certificate": False, "front_door": False},
+            "pulumi:disable-default-providers": ["*"],
         },
+    }
+
+
+def engine_view(values: dict) -> dict[str, str]:
+    """Encode a stack file's config the way `pulumi preview` passes it.
+
+    Observed with pulumi 3.223.0 (evidence log 20): strings as-is; booleans,
+    lists and maps JSON-encoded with Go's compact separators.
+    """
+    return {
+        name: value
+        if isinstance(value, str)
+        else json.dumps(value, separators=(",", ":"))
+        for name, value in values.items()
     }

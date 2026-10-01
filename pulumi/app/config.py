@@ -21,6 +21,8 @@ validated together, so an account id pinned by two stacks fails to load.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,7 +36,9 @@ __all__ = [
     "Features",
     "StackSettings",
     "build_provider",
+    "check_engine_config",
     "check_stack_set",
+    "engine_config",
     "load_stack",
     "parse_stack",
     "provider_args",
@@ -60,6 +64,27 @@ DUMMY_PROVIDER_KEYS = frozenset(
         "aws:skipRegionValidation",
     }
 )
+DISABLE_DEFAULT_PROVIDERS = "pulumi:disable-default-providers"
+# Pulumi.yaml may hold only these keys: `main`, `stackConfigDir`, a project
+# `config:` block or runtime options would let the engine run another entry
+# point or read config this loader never checks (gate finding G31-F01).
+MANIFEST_KEYS = frozenset({"name", "description", "runtime"})
+MANIFEST_RUNTIMES = ("python", {"name": "python"})
+# Environment variables the engine and the passphrase provider use that are
+# not config values: the passphrase inputs of the `ci` stack and the engine's
+# list of secret key names. Any other PULUMI_CONFIG_<KEY> variable would
+# override a config value behind the stack file, so it is refused.
+ENGINE_ENV_ALLOWED = frozenset(
+    {
+        "PULUMI_CONFIG_PASSPHRASE",
+        "PULUMI_CONFIG_PASSPHRASE_FILE",
+        "PULUMI_CONFIG_SECRET_KEYS",
+    }
+)
+# Config keys the engine adds by itself to the program's config view. A real
+# offline `ci` preview with pulumi 3.223.0 passes exactly the stack file's
+# keys (evidence log 20), so this allow-list is empty.
+ENGINE_ADDED_KEYS: frozenset[str] = frozenset()
 PREVIEW_KEY = "pulumi-preview"  # nosec B105 - non-secret dummy for the offline stack
 
 _ACCOUNT = re.compile(r"[0-9]{12}")
@@ -74,8 +99,15 @@ _REQUIRED_KEYS = {
         "pulumiBackendUrl",
         "pulumiSecretsProvider",
         "features",
+        DISABLE_DEFAULT_PROVIDERS,
     ),
-    "ci": ("aws:region", "awsAccountId", "stub_live_invokes", "features"),
+    "ci": (
+        "aws:region",
+        "awsAccountId",
+        "stub_live_invokes",
+        "features",
+        DISABLE_DEFAULT_PROVIDERS,
+    ),
 }
 _TOP_LEVEL_KEYS = {
     "test": {"config", "secretsprovider", "encryptedkey"},
@@ -271,6 +303,10 @@ def parse_stack(stack: str, document: object) -> StackSettings:
         f"Stack {stack!r} 'aws:region' is not a region name.",
     )
     features = _features(stack, values[_key("features")])
+    _require(
+        values[DISABLE_DEFAULT_PROVIDERS] == ["*"],
+        f"Stack {stack!r} must set '{DISABLE_DEFAULT_PROVIDERS}: [\"*\"]'.",
+    )
 
     backend = secrets = None
     if stack in SHARED_STACKS:
@@ -302,8 +338,30 @@ def check_stack_set(settings: Mapping[str, StackSettings]) -> None:
     _require(len(regions) == 1, f"Stacks disagree on the region: {regions}.")
 
 
+_BOOL_TAG = "tag:yaml.org,2002:bool"
+
+
 class _StackFileLoader(yaml.SafeLoader):
-    """SafeLoader that refuses duplicate keys, so none can hide another."""
+    """SafeLoader that refuses duplicate keys and YAML 1.1 booleans.
+
+    Only the literal scalars `true` and `false` are booleans; `yes`, `no`,
+    `on`, `off` and their case variants load as strings, so a flag written
+    that way fails the boolean checks (gate finding G31-F04).
+    """
+
+    yaml_implicit_resolvers = {
+        first: [(tag, regexp) for tag, regexp in resolvers if tag != _BOOL_TAG]
+        for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+    }
+
+    def construct_yaml_bool(self, node: yaml.ScalarNode) -> bool:
+        value = self.construct_scalar(node)
+        _require(
+            value in ("true", "false"),
+            f"Only literal true/false are booleans, not {value!r} "
+            f"at {node.start_mark}.",
+        )
+        return value == "true"
 
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict:
         self.flatten_mapping(node)
@@ -313,6 +371,12 @@ class _StackFileLoader(yaml.SafeLoader):
             f"Duplicate keys in stack file at {node.start_mark}.",
         )
         return mapping
+
+
+_StackFileLoader.add_implicit_resolver(
+    _BOOL_TAG, re.compile(r"^(?:true|false)$"), list("tf")
+)
+_StackFileLoader.add_constructor(_BOOL_TAG, _StackFileLoader.construct_yaml_bool)
 
 
 def _read_yaml(path: Path) -> object:
@@ -329,8 +393,22 @@ def _read_yaml(path: Path) -> object:
 def read_program(program_dir: Path) -> tuple[str, dict[str, object]]:
     """Return the project name and every stack document in `program_dir`."""
     manifest = _read_yaml(program_dir / "Pulumi.yaml")
-    project = manifest.get("name") if isinstance(manifest, dict) else None
+    _require(isinstance(manifest, dict), "Pulumi.yaml must be a YAML mapping.")
+    project = manifest.get("name")
     _require(project == PROJECT, f"Pulumi project must be {PROJECT!r}.")
+    unknown = sorted(set(manifest) - MANIFEST_KEYS)
+    _require(
+        not unknown,
+        f"Pulumi.yaml may set only {sorted(MANIFEST_KEYS)}; unknown keys: {unknown}.",
+    )
+    _require(
+        manifest.get("runtime") in MANIFEST_RUNTIMES,
+        "Pulumi.yaml runtime must be 'python' with no options.",
+    )
+    _require(
+        isinstance(manifest.get("description", ""), str),
+        "Pulumi.yaml description must be text.",
+    )
     documents = {
         path.name[len("Pulumi.") : -len(".yaml")]: _read_yaml(path)
         for path in sorted(program_dir.glob("Pulumi.*.yaml"))
@@ -338,13 +416,94 @@ def read_program(program_dir: Path) -> tuple[str, dict[str, object]]:
     return project, documents
 
 
-def load_stack(stack: str, program_dir: Path) -> StackSettings:
-    """Load `stack` after validating every stack file of the program."""
+def load_stack(
+    stack: str, program_dir: Path, engine: Mapping[str, Any] | None = None
+) -> StackSettings:
+    """Load `stack` after validating every stack file of the program.
+
+    With `engine` (the program's config view, `engine_config()`), the
+    engine's config must also equal the checked stack file's config.
+    """
     _, documents = read_program(program_dir)
     _require(stack in documents, f"No stack file for the selected stack {stack!r}.")
     settings = {name: parse_stack(name, doc) for name, doc in documents.items()}
     check_stack_set(settings)
+    if engine is not None:
+        check_engine_config(stack, documents[stack]["config"], engine)
     return settings[stack]
+
+
+def _same(left: object, right: object) -> bool:
+    """Equality that also requires equal types (so True != 1, "1" != 1)."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _same(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(map(_same, left, right))
+    return left == right
+
+
+def _engine_value_matches(file_value: object, engine_value: object) -> bool:
+    if isinstance(file_value, str):
+        return _same(file_value, engine_value)
+    if not isinstance(engine_value, str):
+        return False
+    try:
+        decoded = json.loads(engine_value)
+    except ValueError:
+        return False
+    return _same(file_value, decoded)
+
+
+def check_engine_config(
+    stack: str, file_values: Mapping[str, Any], engine: Mapping[str, Any]
+) -> None:
+    """Require the engine's config view to equal the checked stack file.
+
+    The engine passes every value as a string, with structured values and
+    booleans JSON-encoded, so non-string file values are compared after
+    decoding. This catches `--config-file`, `stackConfigDir`, project-level
+    config and per-key environment overrides (gate finding G31-F01).
+    """
+    engine_keys = set(engine) - ENGINE_ADDED_KEYS
+    extra = sorted(engine_keys - set(file_values))
+    missing = sorted(set(file_values) - engine_keys)
+    _require(
+        not extra and not missing,
+        f"Stack {stack!r}: the engine's config differs from Pulumi.{stack}.yaml "
+        f"(engine-only keys {extra}, file-only keys {missing}).",
+    )
+    changed = sorted(
+        key
+        for key, value in file_values.items()
+        if not _engine_value_matches(value, engine[key])
+    )
+    _require(
+        not changed,
+        f"Stack {stack!r}: the engine's config values differ from "
+        f"Pulumi.{stack}.yaml for {changed}.",
+    )
+
+
+def engine_config(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Return the config view the Pulumi runtime gives this program."""
+    from pulumi.runtime import config as runtime_config
+
+    environ = os.environ if environ is None else environ
+    stray = sorted(
+        name
+        for name in environ
+        if name.startswith("PULUMI_CONFIG_") and name not in ENGINE_ENV_ALLOWED
+    )
+    _require(
+        not stray,
+        f"Per-key config overrides are not allowed: {stray}.",
+    )
+    keys = set(runtime_config.get_config_env()) | set(runtime_config.CONFIG.get())
+    return {key: runtime_config.get_config(key) for key in sorted(keys)}
 
 
 def provider_args(settings: StackSettings) -> dict[str, Any]:

@@ -9,11 +9,16 @@ The passphrase and backend-URL exemptions apply to exactly `ci`.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
+import yaml
 from app import config
 from app.config import ConfigError
 from stack_fixtures import (
     PULUMI_DIR,
+    ROOT,
     SHARED_STACKS,
     ci_document,
     committed_documents,
@@ -535,3 +540,228 @@ def test_ci_stack_file_is_loaded_from_disk(program_copy, documents) -> None:
     program_dir = program_copy("ci", ci_document(documents))
     settings = config.load_stack("ci", program_dir)
     assert settings.is_offline is True
+
+
+# --- Pulumi.yaml is closed (G31-F01) --------------------------------------------------
+
+MANIFEST = "name: api-gateway-infrastructure\nruntime:\n  name: python\n"
+
+
+def write_manifest(program_copy, text: str) -> Path:
+    (program_copy.directory / "Pulumi.yaml").write_text(text, encoding="utf-8")
+    return program_copy.directory
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        MANIFEST,
+        "name: api-gateway-infrastructure\nruntime: python\n",
+        "name: api-gateway-infrastructure\ndescription: gateway\nruntime: python\n",
+    ],
+)
+def test_manifest_minimal_forms_are_accepted(program_copy, text: str) -> None:
+    program_dir = write_manifest(program_copy, text)
+    assert config.load_stack("test", program_dir).stack == "test"
+
+
+def test_fixture_a_stack_config_dir_fails(program_copy, documents) -> None:
+    """(A) `stackConfigDir` points the engine at stack files nobody checks."""
+    alt = program_copy.directory / "alt"
+    alt.mkdir()
+    bad = documents["test"]
+    bad["encryptionsalt"] = ci_document(documents)["encryptionsalt"]
+    bad["config"]["aws:skipCredentialsValidation"] = True
+    (alt / "Pulumi.test.yaml").write_text(yaml.safe_dump(bad), encoding="utf-8")
+    program_dir = write_manifest(program_copy, MANIFEST + "stackConfigDir: alt/\n")
+    with pytest.raises(ConfigError, match="stackConfigDir"):
+        config.load_stack("test", program_dir)
+
+
+def test_fixture_b_main_elsewhere_fails(program_copy) -> None:
+    """(B) `main` runs another entry point than the tested `__main__.py`."""
+    other = program_copy.directory / "other"
+    other.mkdir()
+    (other / "__main__.py").write_text("print('unchecked')\n", encoding="utf-8")
+    program_dir = write_manifest(program_copy, MANIFEST + "main: other/\n")
+    with pytest.raises(ConfigError, match="main"):
+        config.load_stack("test", program_dir)
+
+
+def test_fixture_c_project_config_block_fails(program_copy) -> None:
+    """(C) a project-level `config:` block merges into every stack unchecked."""
+    text = MANIFEST + "config:\n  aws:skipCredentialsValidation:\n    value: true\n"
+    program_dir = write_manifest(program_copy, text)
+    with pytest.raises(ConfigError, match="config"):
+        config.load_stack("test", program_dir)
+
+
+@pytest.mark.parametrize(
+    ("text", "match"),
+    [
+        (MANIFEST + "backend:\n  url: file:///tmp\n", "backend"),
+        (MANIFEST + "options:\n  refresh: always\n", "options"),
+        (MANIFEST + "plugins:\n  providers: []\n", "plugins"),
+        (MANIFEST + "packages: {}\n", "packages"),
+        (
+            "name: api-gateway-infrastructure\nruntime:\n  name: python\n"
+            "  options:\n    toolchain: pip\n",
+            "runtime",
+        ),
+        (
+            "name: api-gateway-infrastructure\nruntime:\n  name: python\n"
+            "  options:\n    virtualenv: ../venv\n",
+            "runtime",
+        ),
+        ("name: api-gateway-infrastructure\nruntime: nodejs\n", "runtime"),
+        ("name: api-gateway-infrastructure\n", "runtime"),
+        (
+            "name: api-gateway-infrastructure\nruntime: python\ndescription: [x]\n",
+            "description",
+        ),
+        ("- name\n", "mapping"),
+    ],
+)
+def test_manifest_is_closed(program_copy, text: str, match: str) -> None:
+    program_dir = write_manifest(program_copy, text)
+    with pytest.raises(ConfigError, match=match):
+        config.load_stack("test", program_dir)
+
+
+def test_committed_manifest_is_minimal() -> None:
+    manifest = yaml.safe_load((PULUMI_DIR / "Pulumi.yaml").read_text())
+    assert set(manifest) <= {"name", "description", "runtime"}
+    assert manifest["runtime"] in ("python", {"name": "python"})
+
+
+# --- YAML 1.1 booleans are not booleans (G31-F04) -------------------------------------
+
+
+@pytest.mark.parametrize(
+    "word", ["yes", "no", "on", "off", "y", "n", "True", "FALSE", "Yes", "OFF"]
+)
+@pytest.mark.parametrize("stack", ["test", "prod", "ci"])
+def test_yaml11_boolean_feature_flag_fails(program_copy, stack: str, word: str) -> None:
+    path = program_copy.directory / f"Pulumi.{stack}.yaml"
+    text = path.read_text(encoding="utf-8")
+    assert "    certificate: false\n" in text
+    path.write_text(
+        text.replace("    certificate: false\n", f"    certificate: {word}\n")
+    )
+    with pytest.raises(ConfigError, match="features"):
+        config.load_stack(stack, program_copy.directory)
+
+
+@pytest.mark.parametrize("word", ["yes", "on", "y", "True", "TRUE"])
+def test_yaml11_boolean_stub_live_invokes_fails(program_copy, word: str) -> None:
+    path = program_copy.directory / "Pulumi.ci.yaml"
+    text = path.read_text(encoding="utf-8")
+    old = "api-gateway-infrastructure:stub_live_invokes: true\n"
+    assert old in text
+    path.write_text(
+        text.replace(old, f"api-gateway-infrastructure:stub_live_invokes: {word}\n")
+    )
+    with pytest.raises(ConfigError, match="stub_live_invokes"):
+        config.load_stack("ci", program_copy.directory)
+
+
+@pytest.mark.parametrize("word", ["yes", "on", "1"])
+def test_explicit_bool_tag_needs_a_literal(program_copy, word: str) -> None:
+    path = program_copy.directory / "Pulumi.ci.yaml"
+    text = path.read_text(encoding="utf-8")
+    old = "api-gateway-infrastructure:stub_live_invokes: true\n"
+    path.write_text(
+        text.replace(
+            old, f"api-gateway-infrastructure:stub_live_invokes: !!bool {word}\n"
+        )
+    )
+    with pytest.raises(ConfigError, match="literal true/false"):
+        config.load_stack("ci", program_copy.directory)
+
+
+def test_literal_booleans_still_load(program_copy) -> None:
+    path = program_copy.directory / "Pulumi.ci.yaml"
+    text = path.read_text(encoding="utf-8")
+    old = "api-gateway-infrastructure:stub_live_invokes: true\n"
+    path.write_text(
+        text.replace(old, "api-gateway-infrastructure:stub_live_invokes: !!bool true\n")
+    )
+    assert config.load_stack("ci", program_copy.directory).stub_live_invokes is True
+
+
+# --- default providers are disabled in every stack (G31-F05) --------------------------
+
+
+@pytest.mark.parametrize("stack", ["test", "prod", "ci"])
+def test_committed_stacks_disable_default_providers(stack: str) -> None:
+    values = committed_documents()[stack]["config"]
+    assert values["pulumi:disable-default-providers"] == ["*"]
+
+
+@pytest.mark.parametrize("stack", ["test", "prod", "ci"])
+def test_missing_disable_default_providers_fails(stack: str, documents: dict) -> None:
+    del documents[stack]["config"]["pulumi:disable-default-providers"]
+    with pytest.raises(ConfigError, match="disable-default-providers"):
+        config.parse_stack(stack, documents[stack])
+
+
+@pytest.mark.parametrize("value", [["aws"], "*", [], ["*", "aws"], None, True])
+@pytest.mark.parametrize("stack", ["test", "prod", "ci"])
+def test_disable_default_providers_must_be_all(
+    stack: str, value: object, documents: dict
+) -> None:
+    documents[stack]["config"]["pulumi:disable-default-providers"] = value
+    with pytest.raises(ConfigError, match="disable-default-providers"):
+        config.parse_stack(stack, documents[stack])
+
+
+# --- stack files equal the plan's architecture §1 (G31-F03) ---------------------------
+
+ARCHITECTURE = ROOT / "specs" / "gateway-wa-plan" / "architecture.md"
+
+
+def plan_rows() -> dict[str, str]:
+    """Return the `| Item | Value |` rows of architecture.md §1."""
+    text = ARCHITECTURE.read_text(encoding="utf-8")
+    section = text.split("## 1. Target and engine discovery", 1)[1].split("\n## ", 1)[0]
+    rows = re.findall(r"^\| ([^|]+?) \| (.+?) \|$", section, re.MULTILINE)
+    return {item: value for item, value in rows}
+
+
+def plan_pins() -> dict[str, dict[str, str]]:
+    rows = plan_rows()
+    accounts = dict(
+        re.findall(r"`(test|prod)` \(account `([0-9]{12})`\)", rows["Stacks"])
+    )
+    (region,) = re.findall(r"both `([a-z0-9-]+)`", rows["Stacks"])
+    (bucket,) = re.findall(r"`s3://([^`]+)`", rows["Backend"])
+    (kms,) = re.findall(r"`(awskms://[^`]+)`", rows["Backend"])
+    return {
+        stack: {
+            "account": accounts[stack],
+            "region": region,
+            "backend": "s3://" + bucket.replace("{env}", stack),
+            "kms": kms.replace("{env}", stack),
+        }
+        for stack in SHARED_STACKS
+    }
+
+
+def test_plan_rows_parse() -> None:
+    pins = plan_pins()
+    assert set(pins) == set(SHARED_STACKS)
+    assert pins["test"]["account"] != pins["prod"]["account"]
+
+
+@pytest.mark.parametrize("stack", SHARED_STACKS)
+def test_shared_stack_equals_architecture_section_1(stack: str) -> None:
+    pins = plan_pins()[stack]
+    doc = committed_documents()[stack]
+    values = doc["config"]
+    settings = config.load_stack(stack, PULUMI_DIR)
+    assert settings.account_id == values[key("awsAccountId")] == pins["account"]
+    assert values["aws:allowedAccountIds"] == [pins["account"]]
+    assert settings.region == values["aws:region"] == pins["region"]
+    assert settings.backend_url == values[key("pulumiBackendUrl")] == pins["backend"]
+    assert settings.secrets_provider == pins["kms"]
+    assert doc["secretsprovider"] == values[key("pulumiSecretsProvider")] == pins["kms"]

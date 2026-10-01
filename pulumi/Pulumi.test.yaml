@@ -3,6 +3,8 @@
 # the guarded `initialize-stack` path (G3.4), never by hand.
 secretsprovider: awskms://alias/pulumi-api-gateway-infrastructure-test-secrets?region=eu-central-1
 config:
+  pulumi:disable-default-providers:
+    - "*"
   aws:region: eu-central-1
   aws:allowedAccountIds:
     - "891377212104"
