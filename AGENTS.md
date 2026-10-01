@@ -5,7 +5,7 @@ Repo-local rules for `api-gateway-infrastructure`, the Pulumi program for the Vi
 ## Working rules
 
 1. Make the smallest change that satisfies the task; preserve the local Docker workflow (`make start`, `make sh`).
-2. Run the narrowest useful validation for the files you touched. Workflow and hygiene checks: `python3 -m unittest discover -s tests -v`.
+2. Run the narrowest useful validation for the files you touched. Workflow and hygiene checks: `python3 -m unittest discover -s tests -v`. They need PyYAML, which G3.1 records as a dev dependency; the tests fail (never skip) when it is missing.
 3. Use `pulumi -C pulumi ...` for direct Pulumi CLI commands, and only against a stack the task names.
 4. Prefer Make targets and Python helpers over new bash scripts for CI orchestration.
 
@@ -22,7 +22,7 @@ Role ownership (D-A1, D-A9, D-A11):
 
 ### 2. OIDC only
 
-All AWS credentials in CI come from GitHub OIDC role assumption. Never commit or wire a static AWS access key, a Pulumi access token, a passphrase, a personal access token or a GitHub App private key. Workflows use only the job's short-lived `GITHUB_TOKEN`, at the least permission the job needs (`contents: read` on every pull-request job). Locally, use SSO only (see README). Never request or attach `AdministratorAccess`.
+All AWS credentials in CI come from GitHub OIDC role assumption. Never commit or wire (except the AD-A15 `ci` stack, rule 3) a static AWS access key, a Pulumi access token, a passphrase, a personal access token or a GitHub App private key. Workflows use only the job's short-lived `GITHUB_TOKEN`, at the least permission the job needs (`contents: read` on every pull-request job). Locally, use SSO only (see README). Never request or attach `AdministratorAccess`.
 
 ### 3. Stack-config pins
 

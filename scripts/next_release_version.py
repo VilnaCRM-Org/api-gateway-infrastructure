@@ -6,7 +6,7 @@ Stdlib only. Reads git history, never writes to the repository. Writes
 and prints the same lines to stdout.
 
 Rules:
-- the previous release is the highest tag that is exactly ``vMAJOR.MINOR.PATCH``
+- the previous release is the highest tag reachable from HEAD that is exactly ``vMAJOR.MINOR.PATCH``
   (tags such as ``v1.0.0-rc1`` or ``v1.2.3foo`` are ignored);
 - ``type!:`` or a ``BREAKING CHANGE:`` body line is major, ``feat`` is minor,
   ``fix`` is patch, anything else is not releasable;
@@ -18,11 +18,11 @@ import re
 import subprocess
 import sys
 
-TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-BREAKING_SUBJECT_RE = re.compile(r"^[a-z]+(\([^)]*\))?!:")
+TAG_RE = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$", re.ASCII)
+BREAKING_SUBJECT_RE = re.compile(r"^[a-z]+(\([^)]*\))?!:", re.IGNORECASE)
 BREAKING_BODY_RE = re.compile(r"^BREAKING[ -]CHANGE:", re.MULTILINE)
-FEAT_RE = re.compile(r"^feat(\([^)]*\))?:")
-FIX_RE = re.compile(r"^fix(\([^)]*\))?:")
+FEAT_RE = re.compile(r"^feat(\([^)]*\))?:", re.IGNORECASE)
+FIX_RE = re.compile(r"^fix(\([^)]*\))?:", re.IGNORECASE)
 RECORD_SEP = "\x1e"
 FIELD_SEP = "\x1f"
 
@@ -36,7 +36,10 @@ def git(args, cwd):
 def latest_release_tag(cwd):
     """Return (tag, (major, minor, patch)) or (None, (0, 0, 0))."""
     best = None
-    out = git(["for-each-ref", "--format=%(refname:short)", "refs/tags"], cwd)
+    out = git(
+        ["for-each-ref", "--merged=HEAD", "--format=%(refname:lstrip=2)", "refs/tags"],
+        cwd,
+    )
     for name in out.splitlines():
         match = TAG_RE.match(name)
         if match:

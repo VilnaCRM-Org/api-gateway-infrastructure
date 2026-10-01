@@ -4,6 +4,9 @@ Stdlib only; run with ``python3 -m unittest discover -s tests -v``.
 The checks live in ``workflow_checks.py`` and fail closed.
 """
 
+import contextlib
+import importlib.util
+import io
 import os
 import re
 import subprocess
@@ -45,8 +48,16 @@ class RealWorkflowsTest(unittest.TestCase):
         self.assertEqual(wc.check_autorelease(text), [])
 
 
+class PyYamlRequiredTest(unittest.TestCase):
+    def test_pyyaml_importable(self):
+        self.assertIsNotNone(wc.yaml, "PyYAML is required (G3.1 dev dependency)")
+
+
+PR_WRITE = PR_OK.replace("contents: read", "contents: write")
+
+
 class FailClosedFixtureTest(unittest.TestCase):
-    """Each fixture must be reported; the good fixture must pass."""
+    """Every fixture is a pull_request workflow that must be rejected."""
 
     def assertViolation(self, text, needle=""):
         found = wc.check_workflow(text)
@@ -57,24 +68,26 @@ class FailClosedFixtureTest(unittest.TestCase):
         self.assertEqual(wc.check_workflow(PR_OK), [])
 
     def test_a_quoted_on_key(self):
-        self.assertViolation(PR_OK.replace("on:", '"on":', 1), "quoted")
+        self.assertViolation(PR_WRITE.replace("on:", '"on":', 1), "contents")
 
     def test_b_list_form_on(self):
-        text = PR_OK.replace(
+        text = PR_WRITE.replace(
             "on:\n  pull_request:\n    branches: [main]\n",
             "on: [push, pull_request]\n",
         )
-        self.assertViolation(text, "not supported")
+        self.assertViolation(text, "contents")
 
     def test_c_four_space_indentation(self):
-        text = PR_OK.replace("on:\n  pull_request:", "on:\n    pull_request:")
-        self.assertViolation(text, "2 spaces")
+        text = PR_WRITE.replace("on:\n  pull_request:", "on:\n    pull_request:")
+        self.assertViolation(text, "contents")
 
-    def test_d_unrecognised_job_line(self):
-        text = PR_OK.replace("  lint:  # trailing comment", '  "lint": ')
-        self.assertViolation(text, "unrecognised job line")
-        flow = PR_OK.replace("  lint:  # trailing comment", "  lint: {runs-on: x}")
-        self.assertViolation(flow, "unrecognised job line")
+    def test_d_quoted_and_flow_job_lines(self):
+        self.assertViolation(PR_WRITE.replace("  lint:  # trailing comment", '  "lint": '))
+        flow = (
+            "on: pull_request\npermissions: {contents: read}\n"
+            "jobs: {lint: {runs-on: x, permissions: {contents: write}}}\n"
+        )
+        self.assertViolation(flow, "contents")
 
     def test_e_flow_style_uses_step(self):
         text = PR_OK.replace(
@@ -83,8 +96,52 @@ class FailClosedFixtureTest(unittest.TestCase):
         )
         self.assertViolation(text, "not SHA-pinned")
 
-    def test_pull_request_job_write_permission(self):
-        self.assertViolation(PR_OK.replace("contents: read", "contents: write"))
+    def test_1_jobs_indented_four_spaces(self):
+        text = (
+            "on: pull_request\npermissions:\n    contents: read\n"
+            "jobs:\n    lint:\n        runs-on: x\n"
+            "        permissions:\n            contents: write\n"
+        )
+        self.assertViolation(text, "contents")
+
+    def test_2_quoted_permissions_key(self):
+        text = PR_OK.replace(
+            "    runs-on: ubuntu-latest\n",
+            '    runs-on: ubuntu-latest\n    "permissions": {contents: write}\n',
+        )
+        self.assertViolation(text, "contents")
+
+    def test_3_quoted_uses_key_and_next_line_value(self):
+        quoted = PR_OK.replace(
+            f"      - uses: actions/checkout@{SHA}  # v1\n",
+            '      - "uses": actions/checkout@v4\n',
+        )
+        self.assertViolation(quoted, "not SHA-pinned")
+        nextline = PR_OK.replace(
+            f"      - uses: actions/checkout@{SHA}  # v1\n",
+            "      - uses:\n          actions/checkout@v4\n",
+        )
+        self.assertViolation(nextline, "not SHA-pinned")
+
+    def test_reusable_workflow_job_uses_is_checked(self):
+        text = PR_OK.replace(
+            "    runs-on: ubuntu-latest\n",
+            "    uses: org/repo/.github/workflows/x.yml@main\n",
+        ).replace(
+            f"    steps:\n      - uses: actions/checkout@{SHA}  # v1\n", ""
+        )
+        self.assertViolation(text, "not SHA-pinned")
+
+    def test_scalar_permissions_rejected(self):
+        for scalar in ("read-all", "write-all"):
+            self.assertViolation(
+                PR_OK.replace("permissions:\n  contents: read\n", f"permissions: {scalar}\n"),
+                "contents",
+            )
+
+    def test_unparseable_and_duplicate_keys_fail(self):
+        self.assertViolation("on: [\n", "unparseable")
+        self.assertViolation(PR_OK + "permissions:\n  contents: write\n", "duplicate")
 
     def test_pull_request_job_without_permissions(self):
         self.assertViolation(PR_OK.replace("permissions:\n  contents: read\n", ""))
@@ -107,6 +164,13 @@ class FailClosedFixtureTest(unittest.TestCase):
             "    uses: ./.github/workflows/x.yml\n    secrets: inherit\n",
         )
         self.assertViolation(inherit, "secrets")
+
+
+class CompositeActionTest(unittest.TestCase):
+    def test_unpinned_composite_step_rejected(self):
+        text = "runs:\n  using: composite\n  steps:\n    - uses: a/b@v1\n      shell: bash\n"
+        self.assertTrue(wc.check_action(text))
+        self.assertEqual(wc.check_action(text.replace("v1", SHA)), [])
 
 
 class AutoreleaseFixtureTest(unittest.TestCase):
@@ -135,6 +199,17 @@ class AutoreleaseFixtureTest(unittest.TestCase):
 
     def test_unlisted_command_rejected(self):
         self.assertRejected(self.good + "      - run: echo hi\n")
+
+    def test_unpinned_or_other_action_rejected(self):
+        self.assertRejected(self.good.replace("@" + self.good.split("checkout@")[1][:40], "@v7"))
+        self.assertRejected(self.good.replace("actions/checkout@", "evil/other@"))
+
+    def test_shell_chaining_rejected(self):
+        for tail in ("; echo x", " && echo x", " || true", " | cat", " `id`", " $(id)"):
+            self.assertRejected(self.good + f"      - run: gh release create{tail}\n")
+
+    def test_any_secrets_reference_rejected(self):
+        self.assertRejected(self.good.replace("github.token", "secrets.GITHUB_TOKEN"))
 
     def test_extra_secret_rejected(self):
         self.assertRejected(self.good + "      - run: gh release create ${{ secrets.X }}\n")
@@ -184,21 +259,32 @@ class RepositoryGrepTest(unittest.TestCase):
         self.assertEqual(sorted(entries), [("github-actions", "/"), ("uv", "/")])
 
 
-def make_repo(tmp, tags_and_commits):
-    """tags_and_commits: list of ('commit', msg) or ('tag', name)."""
-    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
-               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+def git_env():
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
+        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t.invalid",
+        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t.invalid",
+    )
+    return env
+
+
+def make_repo(tmp, steps):
+    """steps: ('commit', msg), ('tag', name) or ('git', *args)."""
+    env = git_env()
 
     def git(*args):
         subprocess.run(["git", *args], cwd=tmp, check=True, env=env,
                        capture_output=True)
 
-    git("init", "-q")
-    for kind, value in tags_and_commits:
+    git("init", "-q", "-b", "main")
+    for kind, *rest in steps:
         if kind == "commit":
-            git("commit", "-q", "--allow-empty", "-m", value)
+            git("commit", "-q", "--allow-empty", "-m", rest[0])
+        elif kind == "tag":
+            git("tag", rest[0])
         else:
-            git("tag", value)
+            git(*rest)
 
 
 class NextReleaseVersionTest(unittest.TestCase):
@@ -208,7 +294,7 @@ class NextReleaseVersionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             make_repo(tmp, steps)
             out = Path(tmp) / "gh_output"
-            env = dict(os.environ, GITHUB_OUTPUT=str(out))
+            env = dict(git_env(), GITHUB_OUTPUT=str(out))
             res = subprocess.run([sys.executable, str(self.script)], cwd=tmp,
                                  env=env, capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, res.stderr)
@@ -261,6 +347,54 @@ class NextReleaseVersionTest(unittest.TestCase):
         steps = [("commit", "chore: n")] * 300 + [("commit", "feat: last")]
         r = self.run_helper(steps)
         self.assertEqual(r["tag"], "v0.1.0")
+
+    def test_mixed_case_and_scoped_breaking_types(self):
+        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"), ("commit", "Feat: x")])
+        self.assertEqual(r["tag"], "v1.1.0")
+        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"), ("commit", "FIX: x")])
+        self.assertEqual(r["tag"], "v1.0.1")
+        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),
+                             ("commit", "fix(scope)!: x")])
+        self.assertEqual(r["tag"], "v2.0.0")
+
+    def test_breaking_change_footer_stays_uppercase(self):
+        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),
+                             ("commit", "chore: x\n\nbreaking change: no")])
+        self.assertEqual(r["skipped"], "true")
+
+    def test_unreachable_tag_is_ignored(self):
+        r = self.run_helper([
+            ("commit", "feat: base"), ("tag", "v1.0.0"),
+            ("git", "checkout", "-q", "-b", "side"),
+            ("commit", "chore: side"), ("tag", "v5.0.0"),
+            ("git", "checkout", "-q", "main"),
+            ("commit", "fix: on main"),
+        ])
+        self.assertEqual((r["previous"], r["tag"]), ("v1.0.0", "v1.0.1"))
+
+    def test_non_ascii_digit_tag_is_ignored(self):
+        r = self.run_helper([("commit", "a"), ("tag", "v1.0.0"),
+                             ("tag", "v\u0663.0.0"), ("commit", "fix: z")])
+        self.assertEqual(r["tag"], "v1.0.1")
+
+    def test_main_without_github_output_prints_only(self):
+        spec = importlib.util.spec_from_file_location("nrv", self.script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with tempfile.TemporaryDirectory() as tmp:
+            make_repo(tmp, [("commit", "feat: x")])
+            old_cwd, old_env = os.getcwd(), dict(os.environ)
+            os.environ.pop("GITHUB_OUTPUT", None)
+            buf = io.StringIO()
+            try:
+                os.chdir(tmp)
+                with contextlib.redirect_stdout(buf):
+                    self.assertEqual(mod.main(), 0)
+            finally:
+                os.chdir(old_cwd)
+                os.environ.clear()
+                os.environ.update(old_env)
+        self.assertIn("tag=v0.1.0", buf.getvalue())
 
     def test_helper_only_reads_git(self):
         src = self.script.read_text()
