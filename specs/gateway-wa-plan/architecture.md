@@ -4,7 +4,7 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-create-architecture (Create mod
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 3 (2026-10-01: D-A9 governance owns the gateway's grants and non-role BI resources; D-A10 no ConfigRead roles)
+revision: 4 (2026-10-01: D-A11 dedicated governance Apply role for the gateway; D-A9 admission re-scoped; V-A12 resolved)
 inputDocuments: [research.md, brief.md, prd.md, decisions.md, USI specs/workload-wa-hardening (9d5df4a), USI specs/poc-api-gateway-backend.md]
 ---
 
@@ -31,15 +31,18 @@ bootstrap-infrastructure (BI; CODEOWNERS @Kravalg; human seed operator XP-A1)
   │    │    PulumiStateRepl-… (PD-12), ApiGatewayCloudWatchLogs-{env};
   │    │    no ConfigRead readers (D-A10)
   │    ├─ their seed-owned boundaries and immutable guards (issue215-seed/{env}/…)
-  │    ├─ the D-A9 governance admission: exact gateway ARNs in the governance
-  │    │    guard, ceilings and operator bindings, and the operator guards
+  │    ├─ the dedicated governance Apply role (D-A11): GitHubGovernanceApply-
+  │    │    api-gateway-infrastructure-{env}, its ceiling, guard and identity
+  │    ├─ the D-A9 admission, re-scoped by D-A11: exact gateway entries in the
+  │    │    shared Preview/Drift ceilings, the operator bindings and guards
   │    └─ registration in pulumi/seed/catalogs/{env}.json (G1.1 source, G1.2 install)
-  ├─ governance stack, external-identity mode (D-A9, as for USI):
+  ├─ governance stack, external-identity mode, gateway target under the
+  │    dedicated Apply role (D-A9, D-A11):
   │    identity grants (G1.3 basic, G1.4a, G1.4b, G1.7, G1.8),
   │    backend: state bucket, replica, Pulumi secrets key (G1.3),
   │    gateway CMK (G1.6, D-A4), AWS::ApiGateway::Account and the
   │    WAF-log resource policy (G1.5, D-A5)
-  ├─ operator stack (github-ci-bootstrap): the governance roles' gateway
+  ├─ operator stack (github-ci-bootstrap): the shared governance Preview/Drift roles' gateway
   │    storage and IAM identity policies (G1.3, D-A9)
   └─ no gateway resource (API, WAF, domain, DNS) is BI's
 
@@ -88,7 +91,7 @@ ECS tasks.
   | Catalog record | `existing: true`, `owner_project: governance` | a new seed-created service kind (proposed `owner_project: independent_seed_service`; the BI owner may rename it): created with disabled trust, then activated, but not a `GitHubOperator*` executor |
   | Boundary | `GovernanceBoundary-user-service-infrastructure-{env}` (existing, transferred to the seed) and `GovernanceReplicationBoundary-…` | new seed-owned `policy/issue215-seed/{env}/ceiling/GovernanceBoundary-api-gateway-infrastructure-{env}` (the CI roles), `…/GovernanceReplicationBoundary-api-gateway-infrastructure-{env}`, `…/ApiGatewayCloudWatchLogs-{env}` |
   | Guards | one per role under `policy/issue215-seed/{env}/guard/` | the same: `…/guard/GitHubCi{Apply,Preview,Drift}-api-gateway-infrastructure`, `…/guard/PulumiStateRepl-api-gateway-infrastructure`, `…/guard/ApiGatewayCloudWatchLogs` (layer 4 below) |
-  | Identity grants, backend, CMK | written by governance | written by governance too (D-A9), in an external-identity mode, after the seed admits the exact gateway ARNs |
+  | Identity grants, backend, CMK | written by governance under `GitHubGovernanceApply-{env}` | written by governance too (D-A9), in an external-identity mode, under the dedicated `GitHubGovernanceApply-api-gateway-infrastructure-{env}` (D-A11) |
   | Trust | Preview and Drift also trust the `main` ref (GR-20) | exactly one environment subject per role (PD-14), no `pull_request` |
   | Protection of the new policies | the shared denies `668edd62…` and `415affc4…` (TEST; `94b8d964…` and `e59053be…` in PROD) | unchanged and sufficient: every new policy sits under `policy/issue215-seed/{env}/*`, which those denies already cover (BI `pulumi/seed/README.md` lines 146-147). The roles, like USI's, are not listed in `668edd62…`. Listing them would rewrite 21 existing guard documents per account, so it is not done. |
 
@@ -101,7 +104,7 @@ ECS tasks.
     - the digest of the complete installed seed template, as #284 pinned
       `8b86a7ff…` for TEST;
     - the result catalog hash;
-    - the exact list of Add rows and of the D-A9 admission Modify rows.
+    - the exact list of Add rows and of the D-A9/D-A11 admission Modify rows.
 
     It fails closed if replayed against the result. The same PR changes
     `pulumi/seed/policy_registry.py`:
@@ -140,7 +143,7 @@ ECS tasks.
     - `_role_resource`, which today creates "only the three bounded
       executors";
     - a gateway enrolment change-set validator that accepts exactly the
-      Add rows and the exact Modify rows of the D-A9 governance admission (the governance guard `G-GitHubGovernanceApply`, the ceilings `ceiling/GitHubGovernanceApply`, `C-GitHubGovernancePreview` and `C-GitHubGovernanceDrift`, and the five operator executor guards);
+      Add rows and the exact in-place Modify rows of the shared Preview/Drift ceilings (`C-GitHubGovernancePreview`, `C-GitHubGovernanceDrift`) and the five operator executor guards;
     - a gateway activation packet and validator that accept exactly the
       gateway trust Modify rows. Today's activation validator requires
       exactly the three executor trusts (lines 433-462).
@@ -150,23 +153,32 @@ ECS tasks.
   - **Verifier count changes, per environment.** The baseline is 55
     policies, 24 principals and 21 existing roles (`policy_registry.py`
     lines 347-362).
-    - **Principals:** 24 → 29: Preview, Apply, Drift, replication and
-      logging (no ConfigRead reader, D-A10).
+    - **Principals:** 24 → 30: Preview, Apply, Drift, replication,
+      logging, and the dedicated governance Apply role (D-A11); no
+      ConfigRead reader (D-A10).
     - **Existing roles:** stay 21.
-    - **Seed-created principals:** 3 → 8. `verify_enrollment` returns a
+    - **Seed-created principals:** 3 → 9. `verify_enrollment` returns a
       fixed 3 (line 502). The mixed-phase verifier reports the 3
-      executors in their observed phase and 5 disabled gateway principals.
-      After activation, `verify_active_enrollment` reports 8 active
+      executors in their observed phase and 6 disabled gateway principals.
+      After activation, `verify_active_enrollment` reports 9 active
       seed-created principals (if the executors are active).
-    - **Policies:** 55 → 64 = 55 + 3 boundaries + 5 guards + 1 identity
-      policy (the logging role's fixed grant). Under D-A9 the CI and
-      replication roles' identity documents are governance-owned, so they
-      are not seed policies and are not counted. The D-A9 admission
-      changes existing documents in place and adds no seed policy.
-    - These figures (29 principals, 8 seed-created, 64 policies) hold
-      under OQ-11 (b) or (c). Under OQ-11 (a), a dedicated governance
-      Apply role adds one principal, one ceiling and one guard: 30
-      principals, 9 seed-created, 66 policies.
+    - **Policies:** 55 → **67**, not the 66 first estimated for OQ-11 (a):
+      - 55, the baseline;
+      - + 4 ceilings/boundaries: CI, replication, logging, and the
+        dedicated governance Apply ceiling;
+      - + 6 guards: CI Apply, Preview, Drift, replication, logging, and
+        the dedicated governance guard;
+      - + 2 identity policies: the logging role's, and the dedicated
+        role's seed-owned identity.
+
+      The 66 estimate counted one ceiling and one guard for the new role
+      but no identity. Its identity is seed-owned (see "Governance
+      admission"), so it is a seed policy. An operator-written identity
+      would give 66, but it would need the operator's role lists amended
+      too. The CI and replication roles' identity documents are
+      governance-owned, so they are not seed policies. The shared-ceiling
+      and operator-guard amendments change existing documents in place and
+      add no policy.
     - The amendment module recomputes and pins these numbers. Every
       principal stays at ≤ 10 attachments.
   - **Installation and activation (G1.2)**, per environment, TEST first, by
@@ -182,7 +194,7 @@ ECS tasks.
        (`operator_seed_installation.py` lines 232, 357, 363, 555, 561). So
        the change-set validator is what blocks any extra row. It accepts
        exactly the expected Add rows, with no Modify, Remove, replacement
-       or dynamic row; the exact Modify rows of the D-A9 governance admission (the governance guard `G-GitHubGovernanceApply`, the ceilings `ceiling/GitHubGovernanceApply`, `C-GitHubGovernancePreview` and `C-GitHubGovernanceDrift`, and the five operator executor guards) are the only exception. Those Modify
+       or dynamic row; the exact in-place Modify rows of the shared Preview/Drift ceilings (`C-GitHubGovernancePreview`, `C-GitHubGovernanceDrift`) and the five operator executor guards are the only exception. Those Modify
        rows also need a temporary `Update:Modify` stack policy on exactly
        their logical ids, as #284 used.
     4. Execute only that change-set id, and restore the permanent
@@ -195,7 +207,9 @@ ECS tasks.
        rows on exactly the gateway roles' `AssumeRolePolicyDocument`. The values are the
        AD-A1 OIDC trusts; `s3.amazonaws.com` (replication role) and
        `apigateway.amazonaws.com` (logging role), each with
-       `aws:SourceAccount`.
+       `aws:SourceAccount`; and, for the dedicated governance Apply role,
+       the BI governance trust of D-A11 (environment
+       `{env}-governance-api-gateway-infrastructure`).
     7. Read back again; `operator_seed_observation.py --active` gives a
        `verify_active_enrollment` pass.
     8. A reviewed PR moves `CATALOG_HASHES[env]` to the result, with the
@@ -225,93 +239,216 @@ ECS tasks.
     backend names from protected-environment variables. Adding a reader
     later needs a reviewed seed catalog amendment (a new principal, its
     guard and the count change) and a CI-secret owner; it is not planned.
-  - **Governance admission (D-A9), in the same G1.2 change set per
-    account.** Governance owns the gateway's grants, backend, CMK and
-    account settings, as it does for USI. It runs in a new
+  - **Governance admission (D-A9, D-A11), in the same G1.2 change set
+    per account.** Governance owns the gateway's grants, backend, CMK and
+    account settings, as it does for USI (D-A9). It runs in a new
     external-identity mode (a reviewed BI code change), in which it reads
-    the seed-created gateway roles and creates none. The gateway is added
-    to `pulumi/repositories.governance.json`. `dc27f076…` is unchanged, so
-    governance still cannot create, delete or re-bound a role. Every
-    extension names exact ARNs only, following the #284 FR6 precedent,
-    under the BI owner's review and `@Kravalg`'s approval:
-    - **Guard lists:** the exact gateway role ARNs and governance-owned
-      gateway policy ARNs are added to the two `NotResource` lists of
-      `G-GitHubGovernanceApply`. The statement ids follow the baseline:
-      TEST `8c068aaa…`/`5366ec11…` at `ef419680…`,
-      `21195ff8…`/`bb116727…` at #284's `ff2eaf29…`; PROD
-      `9fb811f6…`/`06267ab9…`. This narrows two deny lists; the
-      recorded exception is D-A9 (brief constraints; readiness).
-    - **Governance ceilings:** `ceiling/GitHubGovernanceApply` gains the
-      exact gateway bucket names in its S3 create and delete statement
-      (`7a36d2ff…`). It gains `kms:CreateKey` with
-      `aws:RequestTag/Repository = api-gateway-infrastructure`
-      (`a392c269…` shape, with a second `aws:RequestTag/Purpose` value for
-      the gateway logs CMK). It gains the gateway entries of the KMS
-      management statements, which today admit only the USI key and alias:
-      `81c3805b…` (key policy, rotation, alias, describe; conditioned on
-      the USI tags), `6f28ae7e…` (`kms:TagResource`) and `37942811…`
-      (aliases: only `alias/pulumi-user-service-infrastructure-{env}-secrets`);
-      PROD `c453626c…`, `8fa820e5…`, `baf46019…`. Both gateway key aliases
-      (`pulumi-api-gateway-infrastructure-{env}-secrets` and
-      `api-gateway-infrastructure-{env}-logs`) are added. It gains
-      role-policy attach and put on the exact
-      gateway roles with the gateway boundary (`00257170…`, `d35c02e1…`
-      shape), and `iam:PassRole` of the gateway replication role to S3
-      (`abfe3f39…` shape). For G1.5 it gains `apigateway:PATCH` on
-      `/account`, `iam:PassRole` of `ApiGatewayCloudWatchLogs-{env}` to
-      `apigateway.amazonaws.com`, and `logs:PutResourcePolicy` /
-      `DescribeResourcePolicies` for the gateway WAF-log policy (D-A5 keeps
-      that action off every gateway role). `C-GitHubGovernancePreview` and
-      `C-GitHubGovernanceDrift` gain the matching exact reads (for
-      example `6b2d4e23…`, `0d44e2be…`, `011f1685…`).
-    - **Size blocker (V-A12; OQ-11, open).** A managed policy is limited
-      to 6144 characters, and a role has exactly one permissions
-      boundary, so `ceiling/GitHubGovernanceApply` cannot be split. Its
-      canonical JSON is already 5752 characters in TEST and 5762 in PROD
-      (read-only Python with `policy_registry.canonical_json`), leaving
-      about 390. The revision-3 audit rendered the exact-ARN additions
-      above: 7924 / 7934 characters as new statements, 7187 / 7197 merged
-      into the existing statements, about 8729 with the KMS management
-      entries. **The admission into the Apply ceiling therefore cannot be
-      built with exact ARNs only.** The Preview and Drift ceilings (3789 /
-      3799) have room. G1.1 checks every candidate ceiling at ≤ 6144 and
-      STOPs otherwise. How to restructure is OQ-11 (`decisions.md` §3);
-      this plan does not choose.
-    - **Operator bindings and operator guards:** the governance roles' own
-      gateway identity policies (for example
-      `GitHubGovernanceApply-{env}-api-gateway-infrastructure-storage` and
-      `-iam`, written by the operator stack) are added to the catalog's
-      `operator_bindings` (`policy_write`, `policy_read`, and
-      `policy_read_resources`, which equals the `NotResource` list of
-      `408cdbf9…`/`7a337042…` and must change with it). The bindings are
-      catalog metadata, not template rows: they change in the result
-      catalog and the pin PR, not in the change set. The five
-      `GitHubOperator*` guards that close those names to the USI ones are
-      amended by the same exact ARNs: TEST `0c5eed92…`
-      (`GitHubOperatorApply-iam-write`), `c18540fb…`
-      (`GitHubOperatorApply-attachments`), `408cdbf9…` (the three
-      `-iam-read` guards); PROD `de33acbe…`, `0142330f…`, `7a337042…`.
-      `c18540fb…` and `0142330f…` are `Deny` statements on Resource `*`
-      with an `ArnNotEquals iam:PolicyARN` condition, so adding gateway
-      ARNs narrows a Resource-`*` deny. They are named in the recorded D-A9
-      exception. `dc27f076…` stays the protected, unchanged Resource-`*`
-      deny.
-    - **Fixed policy set.** G1.1 fixes, per environment, the full ARN set
-      of governance-owned gateway **managed** policies on the Apply role
-      (for example
-      `GitHubCiApply-api-gateway-infrastructure-{env}-pulumi-backend`,
-      `-secret-read-deny`, `-certificate`, `-front-door`), and the names of
-      the governance-owned **inline** policies on the Preview, Drift and
-      replication roles. Governance writes those inline, as it does for USI
-      (BI `ci_bootstrap.py` lines 813-853, managed only for `apply`;
-      `pulumi_state.py` line 613); `8c068aaa…` admits them through the role
-      ARN. The new seed-created service kind therefore allows exactly those
-      inline names on those three roles. Today `_verify_role` (line 447)
-      and `_verify_active_executor` (line 524) reject any inline grant on
-      an `existing: false` principal. Later grant stories (G1.4a,
-      G1.4b, G1.7, G1.8) then change only those documents, through
-      governance PRs. A grant that needs a new ARN is a new seed
-      admission in its own slot.
+    the seed-created gateway roles and creates none. Every extension names
+    exact ARNs only (the #284 FR6 precedent), under the BI owner's review
+    and `@Kravalg`'s approval. By D-A11 the gateway's governance **apply**
+    runs under a dedicated role. USI's `ceiling/GitHubGovernanceApply` and
+    `G-GitHubGovernanceApply` (including `8c068aaa…`, `5366ec11…` and
+    `dc27f076…`) are **not changed**.
+    - **Dedicated governance Apply role (D-A11).**
+      `GitHubGovernanceApply-api-gateway-infrastructure-{env}`. It follows
+      the BI pattern `GitHubGovernance{Purpose}-{env}` of
+      `governance_automation.py` line 694, with the target repository
+      inserted; it is ≤ 64 characters, and the BI owner may shorten it.
+      It is a seed-created principal of the new service kind: created with
+      disabled trust, then activated (AD-A1 steps 3-6).
+      - **Trust**, mirroring `governance_trust_policy`
+        (`governance_automation.py` lines 343-395): the BI repository
+        `VilnaCRM-Org/bootstrap-infrastructure` with its immutable ids,
+        `aud` `sts.amazonaws.com`, `workflow` "Pulumi PR Command Runner",
+        `ref` `refs/heads/main`, and `job_workflow_ref` set to
+        `pulumi-governance-account.yml@refs/heads/main`. The one difference
+        is the environment: `{env}-governance-api-gateway-infrastructure`
+        (`sub` and `environment` claims), instead of the USI apply's
+        `{env}-governance`. So a USI governance job cannot assume the
+        gateway role, and the gateway job cannot assume the USI role.
+      - **Ceiling**
+        `policy/issue215-seed/{env}/ceiling/GitHubGovernanceApply-api-gateway-infrastructure`
+        (planning name). Its statements have the shape of the USI ceiling,
+        with gateway resources only:
+        - the generic IAM and STS statement on `*` (`e1ba4aab…` shape;
+          its guard confines the writes);
+        - S3 on the exact gateway state and replica buckets;
+        - KMS management, `CreateKey` and `TagResource`, conditioned on
+          `Repository = api-gateway-infrastructure`, the environment and
+          `Purpose` ∈ {`pulumi-secrets`, `gateway-logs`};
+        - both exact key aliases;
+        - role-policy attach and put on the three gateway CI roles with
+          the gateway boundary, and put on the replication role with the
+          replication boundary;
+        - `iam:PassRole` of the replication role to S3, and of
+          `ApiGatewayCloudWatchLogs-{env}` to `apigateway.amazonaws.com`;
+        - `apigateway:GET`/`PATCH` on `/account`;
+        - `logs:PutResourcePolicy`, `DeleteResourcePolicy` and
+          `DescribeResourcePolicies` (on `*` unless V-A8 finds
+          resource-level support);
+        - the governance backend: the shared `governance/` prefix
+          statements (`69f23143…`, `d4192129…` reused), object read and
+          write only on the gateway stack's own paths
+          (`governance/.pulumi/*/governance/{env}-api-gateway-infrastructure*`
+          and `governance/.pulumi/locks/organization/governance/{env}-api-gateway-infrastructure/*`;
+          a prefix bounded by the exact stack name), read of
+          `governance/.pulumi/meta.yaml`, and the governance secrets key
+          (`94a9f77e…` reused).
+
+        It has no Secrets Manager statement (D-A10).
+
+        **Measured: 5866 characters** in TEST and in PROD (canonical JSON
+        with `policy_registry.canonical_json`, rendered by
+        `evidence/render_governance_sizes.py` in this bundle; the replica
+        bucket name is a placeholder of the USI name's length, which G1.1
+        fixes exactly). That is under 6144, with about 278 characters to
+        spare. The revision-4 audit's independent render of the earlier
+        shape gave 5660 against the 5611 first stated; the difference was
+        in the Purpose lists. The figure above supersedes both.
+      - **Guard**
+        `policy/issue215-seed/{env}/guard/G-GitHubGovernanceApply-api-gateway-infrastructure`.
+        It holds the six shared statements of USI's
+        `G-GitHubGovernanceApply`, reused verbatim (TEST `dc27f076…`,
+        `415affc4…`, `668edd62…`, `6bd9deea…`, `05f77e26…`, `d413d73a…`;
+        PROD `dc27f076…`, `e59053be…`, `94b8d964…`, `0c46dd13…`,
+        `05f77e26…`, `aec83856…`). It adds two new statements of the
+        `8c068aaa…`/`5366ec11…` shape, listing gateway ARNs only:
+        - `iam:*` denied outside the OIDC provider, the four Apply-role
+          managed policies, the two gateway boundaries, and the five
+          gateway roles;
+        - policy writes denied outside those four policies.
+
+        **Measured: 3867 characters** (TEST and PROD).
+      - **Identity**
+        `policy/issue215-seed/{env}/identity/I-GitHubGovernanceApply-api-gateway-infrastructure`.
+        It is seed-owned and grants the same set as the ceiling, so it
+        renders at the same size, 5866. It is seed-owned rather than
+        written by the operator stack, as USI's governance identity is.
+        Today's operator guards close the operator's role writes and role
+        reads to a fixed role list (`455fe8d0…`, `fabd8598…` in TEST), so
+        an operator-written identity would need those two lists, the
+        operator's policy lists and the bindings' `role_write`/`role_read`
+        amended. A change to this identity is a seed amendment in its own
+        slot.
+    - **Selection: one governance target per job and stack.** The
+      reusable governance workflow (`pulumi-governance-account.yml`) runs
+      the gateway as its own target:
+      - a separate stack, `{env}-api-gateway-infrastructure`, of the same
+        `governance` project, in the same backend
+        `s3://pulumi-bootstrap-infrastructure-{env}-state/governance`. This
+        is chosen so that `_validate_backend` (`governance_automation.py`
+        line 271, which requires `/governance`) holds, and the shared
+        Preview/Drift guards' lock deny (`167f653d…` TEST, `e90f172a…`
+        PROD: puts and deletes allowed only under
+        `governance/.pulumi/locks/*`) needs no amendment. Residual: USI's
+        governance Apply role can still write anything under
+        `governance/*` (`beb2b34d…`), including the gateway stack's state.
+        Both run under the same BI owners and reviewers, and preview and
+        drift detect tampering. The dedicated role is confined to its own
+        stack paths;
+      - apply in the protected environment
+        `{env}-governance-api-gateway-infrastructure`, with `@Kravalg` as
+        required reviewer, under the dedicated role;
+      - preview and drift in the existing
+        `{env}-governance-preview`/`-drift` environments, under the shared
+        `GitHubGovernancePreview-{env}`/`GitHubGovernanceDrift-{env}`
+        roles.
+
+      **Workflow wiring (G1.3 step 2).** In `pulumi-governance-account.yml`
+      the `resolve` job, which declares no environment, reads
+      `vars.AWS_GOVERNANCE_{ENV}_APPLY_ROLE_ARN` (lines 128-137). The apply
+      job assumes `needs.resolve.outputs.apply_role` (line 493) in the
+      hard-coded `environment: {0}-governance` (line 433). The stack checks
+      `test "${PULUMI_STACK}" = "${ACCOUNT}"` (lines 249, 392, 483, 621)
+      allow only the account-named stack. An environment-scoped variable
+      could not override the role, because `resolve` never sees it. The
+      workflow change therefore resolves everything per target:
+      - a new repository variable, `AWS_GOVERNANCE_{ENV}_APPLY_GATEWAY_ROLE_ARN`
+        (proposed name), holding the dedicated ARN from the G1.2 readback;
+      - `resolve` selects that variable for the gateway target, and
+        `AWS_GOVERNANCE_{ENV}_APPLY_ROLE_ARN` for USI;
+      - the apply job's environment is
+        `{env}-governance-api-gateway-infrastructure` for the gateway
+        target and stays `{env}-governance` for USI;
+      - `PULUMI_STACK` is `{env}-api-gateway-infrastructure` for the
+        gateway, and the four stack checks accept exactly that name for
+        that target.
+
+      A workflow fixture test shows that the gateway target's
+      `role-to-assume` equals the dedicated ARN and the USI target's is
+      unchanged. The USI target, its stack, environments and roles are
+      unchanged. The BI repository admin creates the new environments and
+      the new variable (G1.3).
+    - **Shared Preview and Drift ceilings (still amended, in-place
+      merge).** `C-GitHubGovernancePreview` and `C-GitHubGovernanceDrift`
+      gain exact gateway reads by merging gateway entries into the
+      statements they share only with each other:
+      - TEST `6b2d4e23…` (role reads: five gateway roles);
+      - `339af045…` (policy reads: four Apply-role policies and the two
+        gateway boundaries; `f16f9131…` at `ff2eaf29…`);
+      - `0d44e2be…` (bucket reads: two gateway buckets);
+      - `011f1685…` (KMS reads: `Repository` and `Purpose` lists; the
+        lists allow cross-combinations of the two repositories' tags, which
+        is acceptable for read-only describe actions);
+      - `2be63eb2…` (`logs:DescribeResourcePolicies` added to the
+        Resource-`*` read statement);
+      - PROD `3899b5e7…`, `5a0f6c90…`, `ec801503…`, `6227eeae…`,
+        `2be63eb2…`.
+
+      One new statement is added: `apigateway:GET` on `/account`. No
+      backend statement changes, because the gateway stack stays under
+      `governance/`. The statements shared with USI's Apply ceiling (TEST
+      `69f23143…`, `d4192129…`, `94a9f77e…`; PROD `7741f40a…`,
+      `8cc37f1f…`, `c911c28b…`) are not edited, so USI's Apply ceiling
+      stays byte-identical. **Measured: 3789 → 5104 (TEST) and 3799 →
+      5114 (PROD); 3889 → 5204 at #284's `ff2eaf29…`.** These come from
+      `evidence/render_governance_sizes.py`, and all are under 6144
+      (V-A12). Separate new statements would not fit: the revision-4
+      audit measured 6648 / 6658 for that construction.
+    - **Operator bindings and operator guards (still amended).** The
+      shared Preview and Drift roles read the gateway through
+      operator-written identity policies, as for USI:
+      `GitHubGovernancePreview-{env}-api-gateway-infrastructure-{iam,storage}`
+      and `GitHubGovernanceDrift-{env}-api-gateway-infrastructure-{iam,storage}`.
+      Their existing `-backend` documents are unchanged (same
+      `governance/` prefix). These four policies are created only for the
+      Preview and Drift purposes. Today `GovernanceAutomation` creates
+      `{role}-{repo}-iam`/`-storage` for every purpose and every catalog
+      repository (`governance_automation.py` lines 652, 739-764), which
+      would attach `GitHubGovernanceApply-{env}-api-gateway-infrastructure-*`
+      to USI's Apply role. G1.3's operator code change restricts a
+      dedicated-target repository to the Preview/Drift purposes and gives
+      it gateway-specific documents. These include the five gateway roles,
+      including the logging role, and exclude ConfigRead roles; the four
+      Apply-role managed policies and two boundaries; and no CI secrets.
+      The four new policy ARNs are added to:
+      - the catalog's `operator_bindings`: `policy_write`, `policy_read`,
+        and `policy_read_resources`, which equals the `NotResource` list of
+        `408cdbf9…`/`7a337042…`. The bindings are catalog metadata, not
+        template rows;
+      - the operator executor guards: TEST `0c5eed92…` (iam-write),
+        `c18540fb…` (attachments), `408cdbf9…` (three iam-read guards);
+        PROD `de33acbe…`, `0142330f…`, `7a337042…`.
+
+      `c18540fb…` and `0142330f…` are Resource-`*` denies with an
+      `ArnNotEquals iam:PolicyARN` condition; they are named in the
+      recorded exception. The operator's role lists (`455fe8d0…`,
+      `fabd8598…`) are unchanged.
+    - **Fixed policy set.** G1.1 fixes, per environment:
+      - the governance-owned gateway **managed** policies on the CI Apply
+        role (`GitHubCiApply-api-gateway-infrastructure-{env}-pulumi-backend`,
+        `-secret-read-deny`, `-certificate`, `-front-door`);
+      - the names of the governance-owned **inline** policies on the CI
+        Preview, Drift and replication roles. Governance writes those
+        inline, as for USI (BI `ci_bootstrap.py` lines 813-853;
+        `pulumi_state.py` line 613). The dedicated role's guard admits
+        them through the role ARN, and the new seed-created kind allows
+        exactly those inline names (`_verify_role` line 447 and
+        `_verify_active_executor` line 524 reject inline grants today).
+
+      Later grant stories (G1.4a, G1.4b, G1.7, G1.8) change only those
+      documents, through governance PRs under the dedicated role. A grant
+      that needs a new ARN is a new seed admission in its own slot.
   - **Layer 3, boundary as a service-family ceiling.** The CI boundary
     allows `sts:GetCallerIdentity`, the state bucket and secrets key, and
     the gateway service families (`apigateway`, `wafv2`, `acm`, `route53`
@@ -359,9 +496,12 @@ ECS tasks.
        `dc27f076…` blocks governance and may not be narrowed. D-A1 decides
        this.
     2. **The writer of grants and non-role resources** stays governance,
-       as for USI, but governance is blocked by its guard (`8c068aaa…`,
-       `5366ec11…`), its USI-scoped ceilings and the operator guards until
-       the D-A9 admission. D-A9 decides this.
+       as for USI (D-A9). USI's governance Apply role is closed to the
+       gateway by its guard (`8c068aaa…`, `5366ec11…`) and by its ceiling,
+       which has no room (5752/5762 of 6144). So the gateway's governance
+       apply runs under a dedicated seed-created role (D-A11), and only the
+       shared Preview/Drift ceilings and the operator guards and bindings
+       are amended.
     3. **ConfigRead:** none (D-A10). USI's readers carry `pull_request`
        and `ref` trust, and their CI secrets would need an owner.
     4. **The trust subject list** is stricter (PD-14).
@@ -753,7 +893,7 @@ ECS tasks.
 | V-A8 | Which read actions lack resource-level support (`elasticloadbalancing:Describe*`, `ec2:Describe*`, `logs:DescribeLogGroups`, `logs:GetQueryResults`, `wafv2` list and capacity, `logs:CreateLogDelivery`) | Service Authorization Reference JSON (as the USI plan fetched it, revision 12) | G1.4a, G1.4b | none: an action with resource-level support gets exact resources |
 | V-A9 | Access logging works with the scoped CloudWatch role and a KMS log group | TEST (gate A-T step 8) | G1.5, G5.6 | the AWS managed policy, only by user decision |
 | V-A10 | The BI owner accepts the seed inventory extension of D-A1: the new seed-created service principal kind, the count and kind changes in `policy_registry.py`, and the Add-row and activation validators in `operator_seed_installation.py`. #285 avoided such an extension (GR-19). | BI owner, G1.1 review | G1.1 | STOP; escalate to the user. There is no silent fallback to an independent stack. |
-| V-A12 | Every governance ceiling, after the D-A9 admission, renders at ≤ 6144 characters in canonical JSON | G1.1 render test (`policy_registry` `canonical_json`, the registry's 6144 check) | G1.1 | STOP; OQ-11. Today the Apply ceiling fails: 5752/5762 + the additions |
+| V-A12 | Every new or amended governance ceiling, guard and identity renders at ≤ 6144 characters in canonical JSON | Measured for revision 4 with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`): dedicated Apply ceiling 5866 (TEST, PROD); its guard 3867; its identity 5866; shared Preview/Drift ceilings 3789/3799 → 5104/5114 (TEST/PROD), 3889 → 5204 at `ff2eaf29…`; USI's Apply ceiling unchanged at 5752 / 5762. G1.1 re-renders them as a test | G1.1 | **Resolved by D-A11.** If any G1.1 render exceeds 6144, STOP and escalate; no wildcard compaction |
 | V-A11 | The API Gateway condition key `apigateway:Request/DisableExecuteApiEndpoint` on `/restapis` creates | docs (GA-7) + simulator | G1.4b | the policy pack alone enforces it |
 
 ## 6. Well-Architected mapping

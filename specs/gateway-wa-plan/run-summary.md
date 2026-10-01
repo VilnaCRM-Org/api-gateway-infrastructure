@@ -11,7 +11,7 @@ This file is the execution ledger. It is not a planning input.
 | Worktree | wt-agi-plan |
 | Branch | feat/gateway-wa-plan |
 | Source baseline | f056c8b32c64e502101ec573191d8f229881bc7a (origin/main) |
-| Bundle revision | 3 (user decisions D-A9, D-A10 of 2026-10-01; revision 1 is `3d511f1`, revision 2 is `d5007b3`) |
+| Bundle revision | 4 (user decision D-A11 of 2026-10-01; revision 1 `3d511f1`, 2 `d5007b3`, 3 `d775081`) |
 | Specs directory | `specs/gateway-wa-plan/` |
 | Target | pulumi (Python Pulumi), stacks test and prod |
 | Environment | none selected; planning is offline |
@@ -104,19 +104,20 @@ This file is the execution ledger. It is not a planning input.
   the governance runbook needs only a catalog entry; GR-12 shows the seed
   guards block it).
 
-## Artifacts (sha256, revision 3)
+## Artifacts (sha256, revision 4)
 
 `run-summary.md` is not hashed here, because it contains the hashes. Check
 with `sha256sum -c` over the block below, from `specs/gateway-wa-plan/`.
 
 ```
-9ec0906fe5c7a8b02258f1ac1ca548278d4a67526e42ec84d3132b9377d2fc42  research.md
-f51bd5aebabe0ef98fb0fa5083bea784b088dac526e335bac2490ae627dda65a  brief.md
-17727b82f8ae7429dd00e815c1458133f98bf8f6dfba31d4ba16084792c57f5c  prd.md
-11a671ba6474ea5a3699dd22d948d971e59cc2d7d5ec090b02cb64afd64c0b1e  architecture.md
-6d050d818552b6d53b0be75a0b19a93cd0f4f5923e2f2addf3634345e56800cf  epics-stories.md
-42c7ecfc5f03d290e9294bf380cc96939ad3ecc4685fe6bde30e245a537c76e8  decisions.md
-67119cf6b0132b676aafa4f2c915bac4ca9c28703fd01408a83c259518d6c7a6  readiness.md
+07889d5ba057222ebd3999a45c677f16f2635b05421e91f4e58680b83024215a  research.md
+478e2b7bf5db68fe3c17e52efdc2620b62232fd1c53de04e032d35ab5a1b13fc  brief.md
+f34e89b3b217b212139ddfe6748c26f50574a3c394f5757e5600d8c4e27a1c12  prd.md
+b135b7a5aee72d0345784017c9edba388bd8d0ae123f0ae9f7e75379658f1766  architecture.md
+623abb3390223cb8dad33e32fc9980142c73772c7f5eaa9d7f8047142f1493ca  epics-stories.md
+392a5b0568b342c533aa7f8e23f74fad2be5939b2bc3b935e9abc8304aef6b97  decisions.md
+7ab5dec9931cd4b811612a06a90fb9cb4744593f2b8531a723b37f50c7214941  readiness.md
+5949530bc4f75924803efa50192d2ce05f7464cc879b0fd3b5621f50dcfd53d5  evidence/render_governance_sizes.py
 ```
 
 ## Gates
@@ -129,12 +130,16 @@ f51bd5aebabe0ef98fb0fa5083bea784b088dac526e335bac2490ae627dda65a  brief.md
 | Revision 2 recheck | REFUTED narrowly: 7 of 8 fixed, #2 partly; new N1 (minor), N2-N3 (nits); all folded in; no third round |
 | Revision 3 pre-commit audit (`claude-router:audit`) | REFUTED: 1 major (governance Apply ceiling cannot hold the exact-ARN admission → OQ-11, V-A12), 3 medium, 1 minor; all folded in |
 | Revision 3 recheck | REFUTED narrowly: 4 of 5 fixed, #4 partly; new N1 (minor), N2 (nit); all folded in; no third round |
+| Revision 4 pre-commit audit (`claude-router:audit`) | REFUTED: 1 major (lock deny outside `governance/`), 2 medium, 2 low, 1 nit; all folded in |
+| Revision 4 recheck | REFUTED narrowly: 5 of 6 fixed, #4 partly; new N1 (medium, apply-role wiring); folded in; no third round |
 | Independent readiness round | not run yet |
 
 ## Report summary
 
-- **Decisions recorded:** D-A1…D-A10 (2026-10-01), gateway-local namespace.
-  They answer OQ-1…OQ-10. Revision 3 adds D-A9 (governance owns the
+- **Decisions recorded:** D-A1…D-A11 (2026-10-01), gateway-local namespace.
+  They answer OQ-1…OQ-11. Revision 4 adds D-A11 (a dedicated, seed-created
+  governance Apply role for the gateway; USI's governance Apply ceiling and
+  guard untouched). Revision 3 adds D-A9 (governance owns the
   gateway's grants, backend, CMK and account settings after an exact-ARN
   seed admission) and D-A10 (no ConfigRead roles).
 - **Epics:**
@@ -153,8 +158,8 @@ f51bd5aebabe0ef98fb0fa5083bea784b088dac526e335bac2490ae627dda65a  brief.md
 - **External preconditions:** XP-A1…XP-A14 (gateway-local namespace).
   XP-A1 is now the human seed operator; XP-A11 is resolved to "the zone
   exists, or is created, in the PROD account".
-- **Open user questions:** OQ-11 (raised by the revision-3 audit: the
-  D-A9 exact-ARN admission does not fit the 6144-character governance
-  Apply ceiling; blocks G1.1). Cross-plan request to USI: CR-A1.
-- **Counts per environment:** 29 principals, 8 seed-created, 64 seed
-  policies (under OQ-11 (b) or (c); under (a): 30 / 9 / 66).
+- **Open user questions:** none. Cross-plan request to USI: CR-A1.
+- **Counts per environment:** 30 principals, 9 seed-created, 67 seed
+  policies. Measured sizes (`evidence/render_governance_sizes.py`):
+  dedicated governance Apply ceiling 5866, its guard 3867, its identity
+  5866, shared Preview/Drift ceilings 5104/5114 (TEST/PROD), all ≤ 6144.

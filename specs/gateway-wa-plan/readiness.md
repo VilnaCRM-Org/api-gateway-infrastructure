@@ -4,10 +4,10 @@ workflow: _bmad/bmm/workflows/3-solutioning/bmad-check-implementation-readiness 
 task: gateway-wa-plan
 source_baseline: f056c8b32c64e502101ec573191d8f229881bc7a
 date: 2026-10-01
-revision: 3 (D-A9 and D-A10 recorded; no open user question)
-author: the planning agent that wrote revisions 1-3 (NOT an independent reviewer)
-independent_reviewer: none yet for revision 3
-status: PENDING independent review of revision 3
+revision: 4 (D-A11 recorded; OQ-11 closed; V-A12 resolved)
+author: the planning agent that wrote revisions 1-4 (NOT an independent reviewer)
+independent_reviewer: none yet for revision 4
+status: PENDING independent review of revision 4
 ---
 
 # Implementation readiness
@@ -20,11 +20,9 @@ pre-commit audit and its recheck ran on each revision before its commit
 (below). The self-check finds the bundle complete enough for an
 independent readiness round. These items block implementation:
 
-- **Open user question:** OQ-11, raised by the revision-3 audit. The
-  D-A9 admission does not fit the 6144-character governance Apply
-  ceiling with exact ARNs only (V-A12). It blocks row 8 and every row
-  that depends on it (BI rows 9 onward; AGI rows 13-15 and 20-32).
-- D-A1…D-A10 answer OQ-1…OQ-10.
+- **Open user questions:** none. D-A1…D-A11 answer OQ-1…OQ-11; D-A11
+  (dedicated governance Apply role) resolves V-A12 and unblocks row 8 and
+  every row that depends on it.
 - **Row blocked by a verification item:** V-A10 (the BI owner accepts the
   seed inventory extension) → row 8.
 - **Rows blocked by external preconditions:**
@@ -49,7 +47,7 @@ independent readiness round. These items block implementation:
   - row 27 before USI row 49;
   - rows 28-32 after USI row 52.
 
-## Checks performed (self-check, revision 3)
+## Checks performed (self-check, revision 4)
 
 | Check | Result |
 | --- | --- |
@@ -60,10 +58,12 @@ independent readiness round. These items block implementation:
 | No OQ-8 (a) remnant | yes: no recovery role, `test-recovery` environment, teardown manifest, recovery guardrail mode or `detached` flag remains |
 | Every story has P, N and E acceptance cases | yes, except G1.7 and G1.8, which reuse the G1.4a and G1.4b matrices in PROD |
 | D-A1 honoured: the gateway roles enter through a reviewed seed catalog amendment installed by the human seed operator; the governance-stack route is not used for role creation; the independent CloudFormation owner is not the chosen route | yes (AD-A1, FR-A01, FR-A02, G1.1, G1.2). The departures from USI are listed in AD-A1: role creation by the seed (D-A1), the governance admission (D-A9), no ConfigRead (D-A10) and the stricter trust (PD-14) |
-| D-A9 honoured: governance writes the gateway's grants, backend, CMK and account settings; the G1.2 change set admits it by exact ARNs only (two guard lists with per-baseline ids, three governance ceilings, operator bindings, five operator guards); external-identity mode; options (a) and (c) only as rejected alternatives | yes (decisions §1 and §3; AD-A1 "Governance admission"; FR-A02…FR-A06; G1.1…G1.8; XP-A1, XP-A4), except that the admission into `ceiling/GitHubGovernanceApply` cannot fit 6144 characters with exact ARNs: V-A12 fails today; OQ-11 is open and blocks G1.1 |
+| D-A9 honoured (re-scoped by D-A11): governance writes the gateway's grants, backend, CMK and account settings; the G1.2 change set admits it by exact ARNs only, now limited to the shared Preview/Drift ceilings (in-place merge), the operator bindings and the five operator guards; USI's `G-GitHubGovernanceApply` and Apply ceiling unchanged; external-identity mode; options (a) and (c) only as rejected alternatives | yes (decisions §1 and §3; AD-A1 "Governance admission"; FR-A02…FR-A06; G1.1…G1.8; XP-A1, XP-A4) |
+| D-A11 honoured: dedicated `GitHubGovernanceApply-api-gateway-infrastructure-{env}` with its own exact-ARN ceiling, guard and identity; trust mirrors `governance_trust_policy` with the environment `{env}-governance-api-gateway-infrastructure`; per-target governance job and stack; USI's ceiling and guard untouched; options (b) and (c) rejected | yes (decisions §1, §3; AD-A1; FR-A02; G1.1-G1.3) |
+| V-A12 (size) | resolved, measured with `policy_registry.canonical_json` (`evidence/render_governance_sizes.py`): dedicated Apply ceiling 5866 (TEST, PROD), its guard 3867, its identity 5866; shared Preview/Drift ceilings 3789/3799 → 5104/5114 (TEST/PROD; 3889 → 5204 at `ff2eaf29…`) by in-place merge; USI's Apply ceiling unchanged at 5752/5762. All ≤ 6144; G1.1 re-renders them as tests |
 | D-A10 honoured: no ConfigRead roles; c = 0; the Apply guard's secret-read statement has no CI-secret variant; a later reader needs a reviewed amendment | yes (AD-A1; FR-A01; G1.1; G3.4; decisions §3) |
-| Counts | per environment 29 principals (24 + 5), 21 existing roles, 8 seed-created principals (3 + 5), 64 policies (55 + 3 boundaries + 5 guards + 1 logging identity), under OQ-11 (b) or (c); under (a) 30 / 9 / 66; recomputed in AD-A1 and FR-A02 |
-| No story narrows an existing seed guard statement on Resource `*` | yes. **Recorded exception (D-A9):** the two `NotResource` lists of `G-GitHubGovernanceApply`, the three governance ceilings and the five operator guards gain exact gateway entries. Two of those guards (`c18540fb…`, `0142330f…`) are Resource-`*` denies with an `ArnNotEquals` condition and are named in the exception; `dc27f076…` does not change (brief, Constraints) |
+| Counts | per environment 30 principals (24 + 6), 21 existing roles, 9 seed-created principals (3 + 6), **67** policies (55 + 4 boundaries/ceilings + 6 guards + 2 identities: logging role and dedicated governance role). The coordinator's estimate of 66 omitted the dedicated role's seed-owned identity (AD-A1 derivation) |
+| No story narrows an existing seed guard statement on Resource `*` | yes. **Recorded exception (D-A9, re-scoped by D-A11):** the shared governance Preview/Drift ceilings and the five operator guards (TEST `0c5eed92…`, `c18540fb…`, `408cdbf9…`; PROD `de33acbe…`, `0142330f…`, `7a337042…`) gain exact gateway entries. Two of those guards (`c18540fb…`, `0142330f…`) are Resource-`*` denies with an `ArnNotEquals` condition and are named in the exception. USI's `G-GitHubGovernanceApply` (`8c068aaa…`, `5366ec11…`, `dc27f076…`) and `ceiling/GitHubGovernanceApply` do not change (brief, Constraints) |
 | No CI role gets `ssm:*`, `iam:*`, `iam:PassRole`, `iam:CreateServiceLinkedRole` | yes (AD-A7 deny set; AD-A1 guards; G1.4a and G1.4b matrices) |
 | D-15 honoured: no SSM write or read anywhere | yes (AD-A2 drops PR #34's parameter; the policy pack refuses `aws:ssm/*`) |
 | D-3 honoured: REST API + WAF + VPC link V2 → ALB; NLB only as reviewed fallback | yes (AD-A4, V-A1) |
@@ -75,8 +75,8 @@ independent readiness round. These items block implementation:
 
 ## User decisions
 
-- **Gateway decisions, dated 2026-10-01:** D-A1…D-A10 (`decisions.md` §1).
-  They answer OQ-1…OQ-10. The namespace is gateway-local, `D-A#` (PD-1).
+- **Gateway decisions, dated 2026-10-01:** D-A1…D-A11 (`decisions.md` §1).
+  They answer OQ-1…OQ-11. The namespace is gateway-local, `D-A#` (PD-1).
 - **Reused, dated 2026-09-30:** D-3, D-6, D-15 and the D-4 consequence
   (`decisions.md` §2).
 - No other user decision was invented. Every choice the plan needed and
@@ -84,12 +84,9 @@ independent readiness round. These items block implementation:
 
 ## Remaining user decisions
 
-| ID | Question | Options (no choice made by this plan) |
-| --- | --- | --- |
-| OQ-11 | How to restructure the D-A9 admission into `ceiling/GitHubGovernanceApply`, which cannot hold the exact-ARN additions within 6144 characters (V-A12) | (a) a dedicated, seed-created governance Apply role for the gateway with its own exact-ARN ceiling; (b) a service-family form of the shared ceiling (patterns or tag conditions, departing from exact ARNs and rewriting USI's ceiling); (c) keep the backend, CMK and account resources out of governance (partly reverses D-A9) |
-
-OQ-9 and OQ-10 are answered by D-A9 (option (b), governance) and D-A10
-(option (a), none); their rejected alternatives are kept in
+None. OQ-9, OQ-10 and OQ-11 are answered by D-A9 (option (b),
+governance), D-A10 (option (a), none) and D-A11 (option (a), dedicated
+governance role); their rejected alternatives are kept in
 `decisions.md` §3.
 
 **Cross-plan request for the USI owner:** CR-A1. USI S4.6 step 17 runs
@@ -107,13 +104,14 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | Role | Items |
 | --- | --- |
 | BI owner | G1.x authorship; V-A10 (accepting the seed inventory extension); XP-A4 slot ordering with the USI queue; XP-A5 and XP-A12 read-backs |
-| Human seed operator (XP-A1) | G1.2 install with the D-A9 admission, trust activation and pin evidence; any later exact-ARN admission; the API Gateway SLR if missing |
-| Governance stack (`governance` environment) | G1.3…G1.8 governance PRs and applies, inside the admitted ARN set (D-A9) |
+| Human seed operator (XP-A1) | G1.2 install with the dedicated governance role and the re-scoped admission, trust activation and pin evidence; any later exact-ARN admission; the API Gateway SLR if missing |
+| Governance stack (gateway target, `{env}-governance-api-gateway-infrastructure`) | G1.3…G1.8 governance PRs and applies under the dedicated role, inside the admitted ARN set (D-A9, D-A11) |
+| BI repository admin | G1.3: create the `{test,prod}-governance-api-gateway-infrastructure` environments (`@Kravalg` sole reviewer), per-action authorization |
 | `@Kravalg` | seed and stack reviews, BI and AGI PR approvals, every protected-environment apply, XP-A3 admin apply |
 | Gateway owner | G0.1 and the D-A6 emptiness check, the certificate hand-offs (XP-A8), PR #34 amendment coordination |
 | USI owner | CR-A1; XP-A7 descriptors (TEST after S4.6 step 20); pinning the gateway ARNs (USI XP-10, XP-15); XP-A14 campaign coordination |
 | Owner of the `vilnacrm.com` PROD zone | XP-A11: the zone exists or is created in account `933245420672`; the zone id and the record permission |
-| User | OQ-11, XP-A10 endpoints, the D-A7 PROD values in the G6.2 PR, per-action authorizations |
+| User | XP-A10 endpoints, the D-A7 PROD values in the G6.2 PR, per-action authorizations |
 
 ## Skill applicability (devops-sdlc)
 
@@ -132,6 +130,34 @@ XP-A1…XP-A14 (`prd.md` §7). Human and owner roles:
 | backup-recovery | PD-6 rebuild |
 | incident-response | runbooks (NFR-A10) |
 | terraform-terraspace | not applicable |
+
+## Revision 4 pre-commit audit (fresh context, `claude-router:audit`)
+
+**Audit of the uncommitted revision 4: REFUTED** (1 major, 2 medium, 2 low, 1 nit). It confirmed:
+- the 30/9/67 arithmetic;
+- the dedicated guard at 3867;
+- the trust mirror of `governance_trust_policy`;
+- that no operator ceiling, `668edd62…` or `415affc4…` blocks the dedicated role;
+- the statement-sharing facts;
+- no forward dependency;
+- that only `specs/` changed.
+
+Resolutions:
+
+| # | Finding (short) | Resolution |
+| --- | --- | --- |
+| 1 | The shared Preview/Drift guards deny lock writes outside `governance/` (`167f653d…`, `e90f172a…`), so a separate prefix broke gateway preview and drift | The gateway stack stays inside `governance/` as `{env}-api-gateway-infrastructure` of project `governance`. No guard change. The dedicated role is confined to its stack paths. USI Apply's `governance/*` write is recorded as a residual |
+| 2 | Preview/Drift 5210/5220 cannot be reproduced as "new statements" (6648/6658) | In-place merge into the Preview/Drift-only statements, with ids. Re-measured 5104/5114 (5204 at `ff2eaf29…`). The render script is committed (`evidence/render_governance_sizes.py`) |
+| 3 | The operator fan-out would attach gateway policies to USI's Apply role | Operator code change in G1.3 step 1 (Preview/Drift purposes only, gateway-specific documents). N case: USI Apply attachments unchanged |
+| 4 | The dedicated target's wiring was unnamed | Workflow wiring specified (see recheck N1) |
+| 5 | Preview/Drift reads omitted the gateway boundaries | Added to the policy-read merge |
+| 6 | Leftovers | D-A9 items marked superseded; readiness, research K-17, the tree and epics row 0 fixed |
+
+**Recheck (same auditor): REFUTED, narrowly.** Findings 1, 2, 3, 5 and 6 are FIXED; #4 is PARTLY fixed.
+- **New N1 (medium):** an environment-scoped variable cannot override the apply role. The `resolve` job declares no environment, and the apply environment and the stack checks are hard-coded.
+- **N1 resolution:** a target-keyed `AWS_GOVERNANCE_{ENV}_APPLY_GATEWAY_ROLE_ARN` read in `resolve`, a per-target apply environment and `PULUMI_STACK`/stack checks, and a workflow fixture test (AD-A1 "Workflow wiring"; G1.3 steps 2-3).
+- The KMS cross-combination note was added.
+- No third round ran.
 
 ## Revision 3 pre-commit audit (fresh context, `claude-router:audit`)
 
